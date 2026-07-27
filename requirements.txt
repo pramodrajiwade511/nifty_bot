@@ -1,7 +1,6 @@
-requests
 pandas
-pandas_ta
+pandas-ta
 yfinance
 schedule
+requests
 matplotlib
-
