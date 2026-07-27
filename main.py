@@ -5,7 +5,7 @@ import requests
 import telebot
 
 # Telegram Configuration
-BOT_TOKEN = "8931528579:AAGyObKQUU"
+BOT_TOKEN = "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno"
 CHAT_ID = "5685619801"
 
 bot = telebot.TeleBot(BOT_TOKEN)
