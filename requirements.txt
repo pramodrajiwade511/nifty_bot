@@ -1,3 +1,7 @@
-pyTelegramBotAPI
 requests
+pandas
+pandas_ta
+yfinance
 schedule
+matplotlib
+
