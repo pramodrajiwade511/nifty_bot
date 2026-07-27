@@ -1,5 +1,4 @@
-
-        import os
+import os
 import time
 import requests
 import pandas as pd
@@ -7,11 +6,11 @@ import pandas_ta as ta
 import yfinance as yf
 import schedule
 import matplotlib
-matplotlib.use('Agg')  # Display नसलेल्या सेव्हरसाठी
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# Credentials
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno"
+# Updated Bot Token and Chat ID
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno")
 CHAT_ID = os.environ.get("CHAT_ID", "5685619801")
 
 current_trade = None
@@ -34,31 +33,28 @@ def send_telegram_photo(photo_path, caption):
     except Exception as e:
         print(f"Error sending photo: {e}")
 
-def generate_chart_image(df, signal_type):
-    """५ मिनिटांच्या कॅन्डल्सचा चार्ट फोटो तयार करणे"""
+def generate_chart_image(df, signal_type, s1, r1):
     file_path = "chart.png"
-    plt.figure(figsize=(10, 5))
-    
-    # Close Price Line (किंवा कॅन्डल्स)
-    plt.plot(df.index[-30:], df['Close'].tail(30), label='Nifty 5m Spot', color='blue', linewidth=1.5)
-    plt.plot(df.index[-30:], df['ST'].tail(30), label='Supertrend', color='orange', linestyle='--')
-
-    plt.title(f"NIFTY 5M CHART - {signal_type} SIGNAL", fontsize=12, fontweight='bold')
+    plt.figure(figsize=(10, 6))
+    recent_df = df.tail(35)
+    plt.plot(recent_df.index, recent_df['Close'], label='Nifty 5m Price', color='#1f77b4', linewidth=2)
+    plt.plot(recent_df.index, recent_df['ST'], label='Supertrend (7,3)', color='#ff7f0e', linestyle='--', linewidth=1.5)
+    plt.axhline(y=s1, color='green', linestyle=':', label=f'Support (S1): {s1}')
+    plt.axhline(y=r1, color='red', linestyle=':', label=f'Resistance (R1): {r1}')
+    plt.title(f"📊 NIFTY 5M CHART - {signal_type} SIGNAL", fontsize=12, fontweight='bold')
     plt.xlabel("Time")
-    plt.ylabel("Price")
-    plt.legend()
+    plt.ylabel("Nifty Spot Price")
+    plt.legend(loc='upper left')
     plt.grid(True, linestyle=':', alpha=0.6)
     plt.tight_layout()
-    plt.savefig(file_path)
+    plt.savefig(file_path, dpi=150)
     plt.close()
     return file_path
 
 def get_levels():
-    """Daily Support and Resistance Levels"""
     df = yf.download(tickers='^NSEI', period='2d', interval='1d', progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    
     prev_day = df.iloc[-2]
     high, low, close = prev_day['High'], prev_day['Low'], prev_day['Close']
     pivot = (high + low + close) / 3
@@ -102,7 +98,6 @@ def check_signals():
         
         s1, r1, pivot = get_levels()
 
-        # Trade Management
         if current_trade is not None:
             trade_type = current_trade['type']
             entry, sl, t1, t2, t3 = current_trade['entry'], current_trade['sl'], current_trade['t1'], current_trade['t2'], current_trade['t3']
@@ -130,15 +125,12 @@ def check_signals():
                 current_trade = None
                 return
 
-        # New Signal Generation with Chart Photo
         if current_trade is None:
-            risk = 10  # 10 Points SL
+            risk = 10
 
-            # CALL SIGNAL (Buy CE)
             if prev_dir == -1 and curr_dir == 1:
                 sl = latest_price - risk
                 t1, t2, t3 = latest_price + (risk*2), latest_price + (risk*3), latest_price + (risk*4)
-
                 current_trade = {'type': 'CE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
 
                 msg = (
@@ -152,14 +144,12 @@ def check_signals():
                     f"🎯 *Target 3 (1:4):* `{t3}` (+40 pts)\n\n"
                     f"⚡ *Trailing SL:* Auto-Active on T1"
                 )
-                chart_path = generate_chart_image(df, "BUY CALL")
+                chart_path = generate_chart_image(df, "BUY CALL", s1, r1)
                 send_telegram_photo(chart_path, msg)
 
-            # PUT SIGNAL (Buy PE)
             elif prev_dir == 1 and curr_dir == -1:
                 sl = latest_price + risk
                 t1, t2, t3 = latest_price - (risk*2), latest_price - (risk*3), latest_price - (risk*4)
-
                 current_trade = {'type': 'PE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
 
                 msg = (
@@ -173,7 +163,7 @@ def check_signals():
                     f"🎯 *Target 3 (1:4):* `{t3}` (-40 pts)\n\n"
                     f"⚡ *Trailing SL:* Auto-Active on T1"
                 )
-                chart_path = generate_chart_image(df, "BUY PUT")
+                chart_path = generate_chart_image(df, "BUY PUT", s1, r1)
                 send_telegram_photo(chart_path, msg)
 
     except Exception as e:
@@ -183,8 +173,7 @@ schedule.every().day.at("09:00").do(send_morning_levels)
 schedule.every(1).minutes.do(check_signals)
 
 if __name__ == "__main__":
-    send_telegram_msg("🤖 *Nifty Bot Updated with Live Chart Photo Alerts!*")
+    send_telegram_msg("🤖 *Nifty Bot Active with Chart Photo Alerts!*")
     while True:
         schedule.run_pending()
         time.sleep(1)
-    
