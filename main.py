@@ -1,3 +1,22 @@
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+if __name__ == "__main__":
+    t = threading.Thread(target=run_flask)
+    t.start()
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 import os
 import time
 import requests
