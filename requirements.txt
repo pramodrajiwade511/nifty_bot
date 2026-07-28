@@ -1,7 +1,7 @@
 
 numpy==1.26.4
 pandas==2.2.1
-yfinance
-schedule
-requests
-matplotlib
+yfinance==0.2.36
+schedule==1.2.1
+requests==2.31.0
+matplotlib==3.8.3
