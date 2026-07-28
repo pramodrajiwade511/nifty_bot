@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import pandas as pd
-import pandas_ta as ta
+
 import yfinance as yf
 import schedule
 import matplotlib
