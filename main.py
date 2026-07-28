@@ -214,3 +214,13 @@ def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     requests.post(url, json=payload)
+import requests
+
+@app.route('/set-webhook')
+def set_webhook():
+    TOKEN = "8931528579:AAGyObQKqUUPnQ5j03oxMB7EF0zvfK7Lzno"
+    WEBHOOK_URL = "https://nifty-bot-3ega.onrender.com/telegram-webhook"
+    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}"
+    response = requests.get(url)
+    return response.json()
+
