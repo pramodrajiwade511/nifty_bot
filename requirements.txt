@@ -5,4 +5,3 @@ yfinance
 schedule
 requests
 matplotlib
-git+https://github.com/twopirllc/pandas-ta.git
