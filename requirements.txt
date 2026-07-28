@@ -1,6 +1,8 @@
-pandas
-pandas-ta
+
+numpy==1.26.4
+pandas==2.2.1
 yfinance
 schedule
 requests
 matplotlib
+git+https://github.com/twopirllc/pandas-ta.git
