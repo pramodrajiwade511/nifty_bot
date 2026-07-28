@@ -182,8 +182,9 @@ def check_signals():
                     f"🎯 *Target 3 (1:4):* `{t3}` (-40 pts)\n\n"
                     f"⚡ *Trailing SL:* Auto-Active on T1"
 # ==========================================
-# टेलिग्राम /price कमांडसाठी नवीन कोड
+# टेलिग्राम /price कमांडसाठी नवीन कोड (एकदम शेवटी टाका)
 # ==========================================
+
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
     update = request.get_json()
@@ -213,26 +214,3 @@ def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     requests.post(url, json=payload)
-
-
-def send_telegram_message(chat_id, text):
-    TOKEN = "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno"  # इथे तुमच्या बॉटचे टोकन टाका
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text}
-    requests.post(url, json=payload)
-
-                )
-                chart_path = generate_chart_image(df, "BUY PUT", s1, r1)
-                send_telegram_photo(chart_path, msg)
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-schedule.every().day.at("09:00").do(send_morning_levels)
-schedule.every(1).minutes.do(check_signals)
-
-if __name__ == "__main__":
-    send_telegram_msg("🤖 *Nifty Bot Active with Chart Photo Alerts!*")
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
