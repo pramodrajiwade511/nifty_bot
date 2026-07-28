@@ -209,6 +209,13 @@ def telegram_webhook():
     return "OK", 200
 
 def send_telegram_message(chat_id, text):
+    TOKEN = "5685619801"
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    requests.post(url, json=payload)
+
+
+def send_telegram_message(chat_id, text):
     TOKEN = "तुमचा_टेलिग्राम_बॉट_टोकन_इथे_टाका"  # इथे तुमच्या बॉटचे टोकन टाका
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
