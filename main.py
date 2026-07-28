@@ -181,6 +181,39 @@ def check_signals():
                     f"🎯 *Target 2 (1:3):* `{t2}` (-30 pts)\n"
                     f"🎯 *Target 3 (1:4):* `{t3}` (-40 pts)\n\n"
                     f"⚡ *Trailing SL:* Auto-Active on T1"
+# ==========================================
+# टेलिग्राम /price कमांडसाठी नवीन कोड
+# ==========================================
+@app.route('/telegram-webhook', methods=['POST'])
+def telegram_webhook():
+    update = request.get_json()
+    if update and "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "")
+        
+        # जर तुम्ही टेलिग्रामवर /price टाइप केले तर
+        if text.lower() == '/price':
+            try:
+                # yfinance कडून निफ्टीची लेटेस्ट प्राईस काढणे
+                nifty_data = yf.Ticker("^NSEI")
+                todays_data = nifty_data.history(period='1d', interval='1m')
+                current_price = todays_data['Close'].iloc[-1]
+                
+                message = f"🟢 Bot is Active & Running!\n📊 Current Nifty Price: {current_price:.2f}"
+            except Exception as e:
+                message = f"🟢 Bot is Active, but error fetching price: {str(e)}"
+            
+            # टेलिग्रामवर मेसेज पाठवणे
+            send_telegram_message(chat_id, message)
+            
+    return "OK", 200
+
+def send_telegram_message(chat_id, text):
+    TOKEN = "तुमचा_टेलिग्राम_बॉट_टोकन_इथे_टाका"  # इथे तुमच्या बॉटचे टोकन टाका
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    requests.post(url, json=payload)
+
                 )
                 chart_path = generate_chart_image(df, "BUY PUT", s1, r1)
                 send_telegram_photo(chart_path, msg)
