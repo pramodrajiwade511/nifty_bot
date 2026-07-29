@@ -152,17 +152,16 @@ def check_signals():
                 t1, t2, t3 = latest_price + (risk*2), latest_price + (risk*3), latest_price + (risk*4)
                 current_trade = {'type': 'CE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
 
-                msg = (
-                    f"🟢 *BUY CALL (CE) SIGNAL* ⬆️⬆️\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📍 *Support Level Marked:* `{s1}`\n"
-                    f"📊 *Nifty Entry Price:* `{latest_price}`\n\n"
-                    f"🛑 *Stop Loss:* `{sl}` (-10 pts)\n"
-                    f"🎯 *Target 1 (1:2):* `{t1}` (+20 pts)\n"
-                    f"🎯 *Target 2 (1:3):* `{t2}` (+30 pts)\n"
-                    f"🎯 *Target 3 (1:4):* `{t3}` (+40 pts)\n\n"
-                    f"⚡ *Trailing SL:* Auto-Active on T1"
-                )
+  msg = f"🟢 *BUY CALL (CE) SIGNAL* ⬆️⬆️\n" \
+              f"-----------------------------------------\n" \
+f"📌 *Support:* {s1} | 📊*Entry:\ *{latest_price}\n\n" \
+  f"🛑 *Stop Loss:* {sl} (-10 pts)\n" \
+  f"🎯 *Target 1:* {t1} (+20 pts)\n" \
+  f"🎯 *Target 2:* {t2} (+30 pts)\n" \
+  f"🎯 *Target 3:* {t3} (+40 pts)\n\n" \
+  f"⚡ *Trailing SL:* Active"
+   
+            
                 chart_path = generate_chart_image(df, "BUY CALL", s1, r1)
                 send_telegram_photo(chart_path, msg)
 
