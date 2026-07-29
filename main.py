@@ -154,7 +154,7 @@ def check_signals():
 
 msg = "🟢 BUY CALL SIGNAL | Entry: " + str(latest_price) + " | SL: " + str(sl) + " | Target: " + str(t1) + " | Trailing SL: Active"
 
-⚡ *Trailing SL:* Active"""
+ *Trailing SL:* Active"""
 
       chart_path = generate_chart_image(df, "BUY CALL", s1, r1)
                 send_telegram_photo(chart_path, msg)
