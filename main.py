@@ -154,7 +154,6 @@ def check_signals():
  msg =f"""🟢 *BUY CALL (CE) SIGNAL* ⬆️⬆️
 -----------------------------------------
 📌 *Support:* {s1} | 📊 *Entry:* {latest_price}
-
 🛑 *Stop Loss:* {sl} (-10 pts)
 🎯 *Target 1:* {t1} (+20 pts)
 🎯 *Target 2:* `{t2}` (+30 pts)
