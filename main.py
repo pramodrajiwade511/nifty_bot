@@ -151,14 +151,14 @@ def check_signals():
                 sl = latest_price - risk
                 t1, t2, t3 = latest_price + (risk*2), latest_price + (risk*3), latest_price + (risk*4)
                 current_trade = {'type': 'CE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
- msg = f"🟢 *BUY CALL (CE) SIGNAL* ⬆️⬆️\n" + \
+ msg = f"""🟢 *BUY CALL (CE) SIGNAL* ⬆️⬆️\n" + \
               f"-----------------------------------------\n" + \
 f"📌 *Support:* {s1} | 📊 *Entry:*\ {latest_price}\n\n" + \
  f"🛑 *Stop Loss:* {sl} (-10 pts)\n" + \
  f"🎯 *Target 1:* {t1} (+20 pts)\n" + \
  f"🎯 *Target 2:* {t2} (+30 pts)\n" + \
  f"🎯 *Target 3:* {t3} (+40 pts)\n\n" + \
-              f"⚡ *Trailing SL:* Active"
+              f"⚡ *Trailing SL:* Active"""
        
 
   
@@ -172,13 +172,13 @@ f"📌 *Support:* {s1} | 📊 *Entry:*\ {latest_price}\n\n" + \
                 t1, t2, t3 = latest_price - (risk*2), latest_price - (risk*3), latest_price - (risk*4)
                 current_trade = {'type': 'PE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
 
- msg = f🔴 *BUY PUT (PE) SIGNAL* ⬇️⬇️\n"
+ msg = f""'🔴 *BUY PUT (PE) SIGNAL* ⬇️⬇️\n"
                                                f ━━━━━━━━━━━━━━━━━━━━━━                  f📍 *Resistance Level Marked:* `{r1}`\         f📊 *Nifty Entry Price:* `{latest_price}`\n\n"
 f 🛑 *Stop Loss:* `{sl}` (+10 pts)\n"
 f 🎯 *Target 1 (1:2):* `{t1}` (-20 pts)\n"
 f 🎯 *Target 2 (1:3):* `{t2}` (-30 pts)\n"
 f 🎯 *Target 3 (1:4):* `{t3}` (-40 pts)\n\n"
-f ⚡ *Trailing SL:* Auto-Active on T1"
+f ⚡ *Trailing SL:* Auto-Active on T1"""
 # ==========================================
 # टेलिग्राम /price कमांडसाठी नवीन कोड (एकदम शेवटी टाका)
 # ==========================================
