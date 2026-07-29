@@ -157,12 +157,7 @@ f📌 *Support:* {s1} | 📊 *Entry:*\ {latest_price}\n\n" + \
  f🎯 *Target 1:* {t1} (+20 pts)\n" + \
  f🎯 *Target 2:* {t2} (+30 pts)\n" + \
  f🎯 *Target 3:* {t3} (+40 pts)\n\n" +              f⚡ *Trailing SL:* Active"""
-       
-
-  
-   
-            
-                chart_path = generate_chart_image(df, "BUY CALL", s1, r1)
+      chart_path = generate_chart_image(df, "BUY CALL", s1, r1)
                 send_telegram_photo(chart_path, msg)
 
             elif prev_dir == 1 and curr_dir == -1:
