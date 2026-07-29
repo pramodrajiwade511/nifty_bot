@@ -151,13 +151,8 @@ def check_signals():
                 sl = latest_price - risk
                 t1, t2, t3 = latest_price + (risk*2), latest_price + (risk*3), latest_price + (risk*4)
                 current_trade = {'type': 'CE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
- msg =f"""🟢 *BUY CALL (CE) SIGNAL* ⬆️⬆️
------------------------------------------
-📌 *Support:* {s1} | 📊 *Entry:* {latest_price}
-🛑 *Stop Loss:* {sl} (-10 pts)
-🎯 *Target 1:* {t1} (+20 pts)
-🎯 *Target 2:* `{t2}` (+30 pts)
-🎯 *Target 3:* {t3} (+40 pts)
+
+msg = "🟢 BUY CALL SIGNAL | Entry: " + str(latest_price) + " | SL: " + str(sl) + " | Target: " + str(t1) + " | Trailing SL: Active"
 
 ⚡ *Trailing SL:* Active"""
 
