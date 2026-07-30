@@ -197,15 +197,7 @@ def telegram_webhook():
             # टेलिग्रामवर मेसेज पाठवणे
             send_telegram_message(chat_id, message)
             
-    return "OK", 200
-from flask import Flask
-import os
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Nifty Bot is Running!"
+    
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
