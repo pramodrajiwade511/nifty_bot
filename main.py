@@ -101,12 +101,10 @@ def send_morning_levels():
 def check_signals():
     global current_trade
     
-df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
-        if isinstance(df.columns, pd.MultiIndex):
-  df.columns = df.columns.get_level_values(0)
-            
-        if df.empty or len(df) < 20:
-            return
+df = yf.download(tickers='^NSEI', period='5d',    interval='5m', progress=False)
+ if isinstance(df.columns, pd.MultiIndex):
+ df.columns = df.columns.get_level_values(0)                  if df.empty or len(df) < 20:
+  return
 
         st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
         df['ST'] = st['SUPERT_7_3.0']
