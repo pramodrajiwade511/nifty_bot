@@ -152,7 +152,15 @@ def check_signals():
                 t1, t2, t3 = latest_price + (risk*2), latest_price + (risk*3), latest_price + (risk*4)
                 current_trade = {'type': 'CE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
 
-msg = "🟢 BUY CALL SIGNAL | Entry: " + str(latest_price) + " | SL: " + str(sl) + " | Target: " + str(t1) + " | Trailing SL: Active"
+msg = "🟢 BUY CALL SIGNAL"
+# जेव्हा ट्रेड चालू असेल आणि मार्केट वर जाईल, तेव्हा ट्रेलिंग एसएल ॲक्टिव्ह राहील
+if current_trade is not None and trade_type == 'CE':
+    if latest_price > current_trade.get('entry', 0):
+        # प्राईस वर गेल्यावर एसएल मूळ जागेवरून किंवा प्रॉफिटनुसार ट्रेल करण्यासाठीचे लॉजिक
+        profit_points = latest_price - current_trade['entry']
+        if profit_points >= 10:  # समजा 10 पॉईंट प्रॉफिट झाला तर
+            # इथे तुम्ही एसएल वर सरकवू शकता किंवा मूळ एसएल तसेच ठेवू शकता
+            pass
 
  
 
