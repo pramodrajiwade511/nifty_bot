@@ -1,7 +1,17 @@
 from flask import Flask, request
 import threading
 
-app = Flask(__name__)
+from flask import Flask, request
+import threading
+import os
+import time
+import requests
+import pandas as pd
+import yfinance as yf
+import schedule
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 @app.route('/')
 def home():
@@ -17,16 +27,7 @@ if __name__ == "__main__":
     while True:
         schedule.run_pending()
         time.sleep(1)
-import os
-import time
-import requests
-import pandas as pd
-
-import yfinance as yf
-import schedule
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+ 
 
 # Updated Bot Token and Chat ID
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno")
