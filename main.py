@@ -104,7 +104,7 @@ def send_morning_levels():
                  df.columns = df.columns.get_level_values(0)
             
             if df.empty or len(df) < 20:
-            return
+                  return
             
         st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
         df['ST'] = st['SUPERT_7_3.0']
