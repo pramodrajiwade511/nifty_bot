@@ -128,7 +128,7 @@ def check_signals():
                 if (trade_type == 'CE' and latest_price >= t2) or (trade_type == 'PE' and latest_price <= t2):
                     current_trade['t2_hit'] = True
                     current_trade['sl'] = t1
-                    send_telegram_msg(f"🚀 *TARGET 2 ACHIEVED (1:3)* 🚀\n\nPrice: `{latest_price}`\n🔄 *Trailing SL moved to T1:* `{t1}`
+        send_telegram_msg(f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\nPrice: {latest_price}\n📌 *Trailing SL moved to T1:* {t1}")
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
     update = request.get_json()
