@@ -206,6 +206,8 @@ def telegram_webhook():
             send_telegram_message(chat_id, message)
             
     
+    except Exception as e:
+        print(f"Error in check_signals: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
