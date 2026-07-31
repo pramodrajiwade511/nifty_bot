@@ -133,9 +133,6 @@ def send_morning_levels():
                     send_telegram_msg(f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\nPrice: {latest_price}\n📌 *Trailing SL moved to T1:* {t1}")
         except Exception as e:
         print(f"Network or Data Error in check_signals: {e}")
-
-        # टेलिग्रामवर मेसेज पाठवणे
-            send_telegram_message(chat_id, message)
         
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
