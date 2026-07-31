@@ -102,7 +102,7 @@ def check_signals():
     
         df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+  df.columns = df.columns.get_level_values(0)
             
         if df.empty or len(df) < 20:
             return
