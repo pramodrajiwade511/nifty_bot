@@ -101,7 +101,7 @@ def send_morning_levels():
 def check_signals():
     global current_trade
     
-        df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
+df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
         if isinstance(df.columns, pd.MultiIndex):
   df.columns = df.columns.get_level_values(0)
             
@@ -132,58 +132,7 @@ def check_signals():
                 if (trade_type == 'CE' and latest_price >= t2) or (trade_type == 'PE' and latest_price <= t2):
                     current_trade['t2_hit'] = True
                     current_trade['sl'] = t1
-                    send_telegram_msg(f"🚀 *TARGET 2 ACHIEVED (1:3)* 🚀\n\nPrice: `{latest_price}`\n🔄 *Trailing SL moved to T1:* `{t1}`")
-
-            elif (trade_type == 'CE' and latest_price >= t3) or (trade_type == 'PE' and latest_price <= t3):
-                send_telegram_msg(f"🏆 *TARGET 3 ACHIEVED (1:4) - FULL EXIT!* 🏆\n\nPrice: `{latest_price}`")
-                current_trade = None
-                return
-
-            if (trade_type == 'CE' and latest_price <= current_trade['sl']) or (trade_type == 'PE' and latest_price >= current_trade['sl']):
-                reason = "Trailing SL Hit" if current_trade['t1_hit'] else "Stop Loss Hit"
-                send_telegram_msg(f"🛑 *{reason}!* 🛑\n\nExit Price: `{latest_price}`")
-                current_trade = None
-                return
-
-        if current_trade is None:
-            risk = 10
-
-            if prev_dir == -1 and curr_dir == 1:
-                sl = latest_price - risk
-                t1, t2, t3 = latest_price + (risk*2), latest_price + (risk*3), latest_price + (risk*4)
-                current_trade = {'type': 'CE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
-
-msg = "🟢 BUY CALL SIGNAL"
-# जेव्हा ट्रेड चालू असेल आणि मार्केट वर जाईल, तेव्हा ट्रेलिंग एसएल ॲक्टिव्ह राहील
-if current_trade is not None and trade_type == 'CE':
-    if latest_price > current_trade.get('entry', 0):
-        # प्राईस वर गेल्यावर एसएल मूळ जागेवरून किंवा प्रॉफिटनुसार ट्रेल करण्यासाठीचे लॉजिक
-        profit_points = latest_price - current_trade['entry']
-        if profit_points >= 10:  # समजा 10 पॉईंट प्रॉफिट झाला तर
-            # इथे तुम्ही एसएल वर सरकवू शकता किंवा मूळ एसएल तसेच ठेवू शकता
-            pass
-
- 
-
-      chart_path = generate_chart_image(df, "BUY CALL", s1, r1)
-                send_telegram_photo(chart_path, msg)
-
-            elif prev_dir == 1 and curr_dir == -1:
-                sl = latest_price + risk
-                t1, t2, t3 = latest_price - (risk*2), latest_price - (risk*3), latest_price - (risk*4)
-                current_trade = {'type': 'PE', 'entry': latest_price, 'sl': sl, 't1': t1, 't2': t2, 't3': t3, 't1_hit': False, 't2_hit': False}
-
- msg = f""'🔴 *BUY PUT (PE) SIGNAL* ⬇️⬇️\n"
-       f ━━━━━━━━━━━━━━━━━━━━━━                  f📍 *Resistance Level Marked:* `{r1}`\         f📊 *Nifty Entry Price:* `{latest_price}`\n\n"
-f 🛑 *Stop Loss:* `{sl}` (+10 pts)\n"
-f 🎯 *Target 1 (1:2):* `{t1}` (-20 pts)\n"
-f 🎯 *Target 2 (1:3):* `{t2}` (-30 pts)\n"
-f 🎯 *Target 3 (1:4):* `{t3}` (-40 pts)\n\n"
-f ⚡ *Trailing SL:* Auto-Active on T1"""
-# ==========================================
-# टेलिग्राम /price कमांडसाठी नवीन कोड (एकदम शेवटी टाका)
-# ==========================================
-
+                    send_telegram_msg(f"🚀 *TARGET 2 ACHIEVED (1:3)* 🚀\n\nPrice: `{latest_price}`\n🔄 *Trailing SL moved to T1:* `{t1}`
 @app.route('/telegram-webhook', methods=['POST'])
 def telegram_webhook():
     update = request.get_json()
