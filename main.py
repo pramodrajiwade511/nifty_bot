@@ -1,5 +1,3 @@
-from flask import Flask, request
-import threading
 
 from flask import Flask, request
 import threading
@@ -97,13 +95,17 @@ def send_morning_levels():
         send_telegram_msg(msg)
     except Exception as e:
         print(f"Error: {e}")
-def check_signals():
-    global current_trade
-    df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    if df.empty or len(df) <20:
-        return 
+    def check_signals():
+        try:
+        global current_trade
+        df = yfinance.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
+        
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+            
+        if df.empty or len(df) < 20:
+            return
+            
         st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
         df['ST'] = st['SUPERT_7_3.0']
         df['ST_DIR'] = st['SUPERTd_7_3.0']
@@ -111,50 +113,30 @@ def check_signals():
         latest_price = round(df['Close'].iloc[-1], 2)
         prev_dir = df['ST_DIR'].iloc[-2]
         curr_dir = df['ST_DIR'].iloc[-1]
-        
+
         s1, r1, pivot = get_levels()
 
         if current_trade is not None:
             trade_type = current_trade['type']
             entry, sl, t1, t2, t3 = current_trade['entry'], current_trade['sl'], current_trade['t1'], current_trade['t2'], current_trade['t3']
-
+            
             if not current_trade['t1_hit']:
                 if (trade_type == 'CE' and latest_price >= t1) or (trade_type == 'PE' and latest_price <= t1):
                     current_trade['t1_hit'] = True
                     current_trade['sl'] = entry
-                    send_telegram_msg(f"🎯 *TARGET 1 ACHIEVED (1:2)* 🎯\n\nPrice: `{latest_price}`\n🔄 *Trailing SL moved to Entry:* `{entry}`")
-
+                    send_telegram_msg(f"🎯 *TARGET 1 ACHIEVED (1:2)* ✅\n\nPrice: {latest_price}\n📌 *Trailing SL moved to Entry:* {entry}")
+            
             elif not current_trade['t2_hit']:
                 if (trade_type == 'CE' and latest_price >= t2) or (trade_type == 'PE' and latest_price <= t2):
                     current_trade['t2_hit'] = True
                     current_trade['sl'] = t1
-        send_telegram_msg(f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\nPrice: {latest_price}\n📌 *Trailing SL moved to T1:* {t1}")
-@app.route('/telegram-webhook', methods=['POST'])
-def telegram_webhook():
-    update = request.get_json()
-    if update and "message" in update:
-        chat_id = update["message"]["chat"]["id"]
-        text = update["message"].get("text", "")
-        
-        # जर तुम्ही टेलिग्रामवर /price टाइप केले तर
-        if text.lower() == '/price':
-            try:
-                # yfinance कडून निफ्टीची लेटेस्ट प्राईस काढणे
-                nifty_data = yf.Ticker("^NSEI")
-                todays_data = nifty_data.history(period='1d', interval='1m')
-                current_price = todays_data['Close'].iloc[-1]
-                
-                message = f"🟢 Bot is Active & Running!\n📊 Current Nifty Price: {current_price:.2f}"
-            except Exception as e:
-                message = f"🟢 Bot is Active, but error fetching price: {str(e)}"
-            
-            # टेलिग्रामवर मेसेज पाठवणे
-            send_telegram_message(chat_id, message)
-            
-    
-    except Exception as e:
-        print(f"Error in check_signals: {e}")
+                    send_telegram_msg(f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\nPrice: {latest_price}\n📌 *Trailing SL moved to T1:* {t1}")
+        except Exception as e:
+        print(f"Network or Data Error in check_signals: {e}")
 
+        # टेलिग्रामवर मेसेज पाठवणे
+            send_telegram_message(chat_id, message)
+        
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
@@ -164,8 +146,7 @@ def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     requests.post(url, json=payload)
-import requests
-
+    
 @app.route('/set-webhook')
 def set_webhook():
     TOKEN = "8931528579:AAGyObQKqUUPnQ5j03oxMB7EF0zvfK7Lzno"
