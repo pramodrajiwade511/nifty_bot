@@ -99,7 +99,7 @@ def send_morning_levels():
 
 def check_signals():
     global current_trade
-    try:
+    
         df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
