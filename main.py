@@ -28,8 +28,8 @@ if __name__ == "__main__":
  
 
 # Updated Bot Token and Chat ID
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno")
-CHAT_ID = os.environ.get("CHAT_ID", "5685619801")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
 current_trade = None
 
@@ -147,14 +147,14 @@ def send_morning_levels():
         print(f"Network or Data Error in check_signals: {e}")
         
 def send_telegram_message(chat_id, text):
-    TOKEN = "8931528579:AAGyObQKqUUPnQ5jO3oxMB7EF0zvfK7Lzno"
+    TOKEN = BOT_TOKEN
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
     requests.post(url, json=payload)
     
 @app.route('/set-webhook')
 def set_webhook():
-    TOKEN = "8931528579:AAGyObQKqUUPnQ5j03oxMB7EF0zvfK7Lzno"
+    TOKEN = BOT_TOKEN
     WEBHOOK_URL = "https://nifty-bot-3ega.onrender.com/telegram-webhook"
     url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}"
     response = requests.get(url)
