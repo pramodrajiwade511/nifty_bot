@@ -116,15 +116,13 @@ def send_morning_levels():
 
             s1, r1, pivot = get_levels()
 
-            if current_trade is not None:
-        trade_type = current_trade['type']
-        entry, sl, t1, t2, t3 = (
-            current_trade['entry'],
-            current_trade['sl'],
-            current_trade['t1'],
-            current_trade['t2'],
-            current_trade['t3']
-        )
+    if current_trade is not None:
+                trade_type = current_trade['type']
+                    entry = current_trade['entry']
+                    s1 = current_trade['s1']
+                    t1 = current_trade['t1']
+                    t2 = current_trade['t2']
+                    t3 = current_trade['t3']
 
         if not current_trade['t1_hit']:
             if (trade_type == 'CE' and latest_price >= t1) or (trade_type == 'PE' and latest_price <= t1):
