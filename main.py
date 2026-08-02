@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is running!"ko 80
 
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
@@ -110,13 +110,14 @@ def send_morning_levels():
             df['ST'] = st['SUPERT_7_3.0']
             df['ST_DIR'] = st['SUPERTd_7_3.0']
 
-            latest_price = round(df['Close'].iloc[-1], 2)
-            prev_dir = df['ST_DIR'].iloc[-2]
-                  curr_dir = df['ST_DIR'].iloc[-1]
+    
+        latest_price = round(df['Close'].iloc[-1], 2)
+                prev_dir = df['ST_DIR'].iloc[-2]
+                        curr_dir = df['ST_DIR'].iloc[-1]
 
-                          s1, r1, pivot = get_levels()
-            except Exception as e:
-                          print(f"Error in check_signals: {e}")
+                        s1, r1, pivot = get_levels()
+        except Exception as e:                                                                                        
+                        print(f"Error in check_signals: {e}")
 
             if current_trade is not None:
 
