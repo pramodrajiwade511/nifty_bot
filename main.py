@@ -95,30 +95,29 @@ def send_morning_levels():
         send_telegram_msg(msg)
     except Exception as e:
         print(f"Error: {e}")
-    def check_signals():
-        try:
-            global current_trade
-            df = yfinance.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
-        
-            if isinstance(df.columns, pd.MultiIndex):
-                 df.columns = df.columns.get_level_values(0)
-            
-            if df.empty or len(df) < 20:
-                  return
-            
-            st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
-            df['ST'] = st['SUPERT_7_3.0']
-         df['ST_DIR'] = st['SUPERTd_7_3.0'].                    
-     
-          latest_price = round(df['Close'].iloc[-1], 2)
-          prev_dir = df['ST_DIR'].iloc[-2]
-          curr_dir = df['ST_DIR'].iloc[-1]
-          s1, r1, pivot = get_levels()
-      except Exception as e:
-          print(f"Error in check_signals: {e}")
+    
+def check_signals():
+    try:
+        global current_trade
+        df = yfinance.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
 
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
-            if current_trade is not None:
+        if df.empty or len(df) < 20:
+            return
+
+        st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
+        df['ST'] = st['SUPERT_7_3_0']
+        df['ST_DIR'] = st['SUPERTD_7_3_0']
+
+        latest_price = round(df['Close'].iloc[-1], 2)
+        prev_dir = df['ST_DIR'].iloc[-2]
+        curr_dir = df['ST_DIR'].iloc[-1]
+
+        s1, r1, pivot = get_levels()
+    except Exception as e:
+        print(f"Error in check_signals: {e}") 
 
     if current_trade is not None:
                 trade_type = current_trade['type']
