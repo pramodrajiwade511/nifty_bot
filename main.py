@@ -112,9 +112,13 @@ def send_morning_levels():
 
             latest_price = round(df['Close'].iloc[-1], 2)
             prev_dir = df['ST_DIR'].iloc[-2]
-            curr_dir = df['ST_DIR'].iloc[-1]
+                  curr_dir = df['ST_DIR'].iloc[-1]
 
-            s1, r1, pivot = get_levels()
+                          s1, r1, pivot = get_levels()
+            except Exception as e:
+                          print(f"Error in check_signals: {e}")
+
+            if current_trade is not None:
 
     if current_trade is not None:
                 trade_type = current_trade['type']
