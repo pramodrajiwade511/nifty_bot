@@ -116,35 +116,79 @@ def check_signals():
         curr_dir = df['ST_DIR'].iloc[-1]
 
         s1, r1, pivot = get_levels()
+    def check_signals():
+    try:
+        global current_trade
+
+        df = yf.download(
+            tickers='^NSEI',
+            period='5d',
+            interval='5m',
+            progress=False
+        )
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        if df.empty or len(df) < 20:
+            return
+
+        st = ta.supertrend(
+            df['High'],
+            df['Low'],
+            df['Close'],
+            length=7,
+            multiplier=3
+        )
+
+        df['ST'] = st['SUPERT_7_3_0']
+        df['ST_DIR'] = st['SUPERTd_7_3_0']
+
+        latest_price = round(df['Close'].iloc[-1], 2)
+        prev_dir = df['ST_DIR'].iloc[-2]
+        curr_dir = df['ST_DIR'].iloc[-1]
+
+        s1, r1, pivot = get_levels()
+
+        if current_trade is not None:
+            trade_type = current_trade['type']
+            entry = current_trade['entry']
+            s1 = current_trade['s1']
+            t1 = current_trade['t1']
+            t2 = current_trade['t2']
+            t3 = current_trade['t3']
+
+            if not current_trade['t1_hit']:
+                if (
+                    (trade_type == 'CE' and latest_price >= t1)
+                    or
+                    (trade_type == 'PE' and latest_price <= t1)
+                ):
+                    current_trade['t1_hit'] = True
+                    current_trade['sl'] = entry
+
+                    send_telegram_msg(
+                        f"🎯 *TARGET 1 ACHIEVED (1:2)* ✅\n\n"
+                        f"Price: {latest_price}\n"
+                        f"🔺 Trailing SL moved to Entry: {entry}"
+                    )
+
+            elif not current_trade['t2_hit']:
+                if (
+                    (trade_type == 'CE' and latest_price >= t2)
+                    or
+                    (trade_type == 'PE' and latest_price <= t2)
+                ):
+                    current_trade['t2_hit'] = True
+                    current_trade['sl'] = t1
+
+                    send_telegram_msg(
+                        f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\n"
+                        f"Price: {latest_price}\n"
+                        f"🔺 Trailing SL moved to T1: {t1}"
+                    )
+
     except Exception as e:
-        print(f"Error in check_signals: {e}") 
-
-    if current_trade is not None:
-                trade_type = current_trade['type']
-                    entry = current_trade['entry']
-                    s1 = current_trade['s1']
-                    t1 = current_trade['t1']
-                    t2 = current_trade['t2']
-                    t3 = current_trade['t3']
-
-        if not current_trade['t1_hit']:
-            if (trade_type == 'CE' and latest_price >= t1) or (trade_type == 'PE' and latest_price <= t1):
-                current_trade['t1_hit'] = True
-                current_trade['sl'] = entry
-                send_telegram_msg(
-                    f"🎯 *TARGET 1 ACHIEVED (1:2)* ✅\n\nPrice: {latest_price}\n"
-                    f"🔺 Trailing SL moved to Entry: {entry}"
-                )
-
-        elif not current_trade['t2_hit']:
-            if (trade_type == 'CE' and latest_price >= t2) or (trade_type == 'PE' and latest_price <= t2):
-                current_trade['t2_hit'] = True
-                current_trade['sl'] = t1
-                send_telegram_msg(
-                    f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\nPrice: {latest_price}\n"
-                    f"🔺 Trailing SL moved to T1: {t1}"
-                )
-        except Exception as e:
         print(f"Network or Data Error in check_signals: {e}")
         
 def send_telegram_message(chat_id, text):
