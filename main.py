@@ -200,12 +200,13 @@ def check_signals():
 
 @app.route('/')
 def home(): return "Bot is running perfectly!"
-
 if __name__ == "__main__":
     try:
-        send_telegram_message("🤖 टाटा बॉट सुरू झाला आहे! 🚀\nमार्केट सिग्नल्स मॉनिटर करणे सुरू केले आहे...")
+        send_telegram_message("Tata Bot Shuru Jhala Aahe! Market signals monitor karne shuru kele aahe.")
     except Exception as e:
         print(f"Error sending welcome message: {e}")
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+    
+
  
