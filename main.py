@@ -1,105 +1,61 @@
-
-from flask import Flask, request
-import threading
 import os
-import time
 import requests
 import pandas as pd
+import pandas_ta as ta
 import yfinance as yf
-import schedule
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+from flask import Flask
 
-@app.route('/')
-def home():
-    return "Bot is running!"
+app = Flask(__name__)
 
-def run_flask():
-    app.run(host='0.0.0.0', port=10000)
-
-if __name__ == "__main__":
-    t = threading.Thread(target=run_flask)
-    t.start()
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
- 
-
-# Updated Bot Token and Chat ID
+# Telegram settings (Render वरील Environment Variables मधून येतील)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
 current_trade = None
 
-def send_telegram_msg(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
+def send_telegram_message(message):
+    """Telegram वर मेसेज पाठवण्यासाठी फंक्शन"""
+    if not BOT_TOKEN or not CHAT_ID:
+        print("Telegram config missing: BOT_TOKEN or CHAT_ID not set.")
+        return
+    url = f"https://telegram.org{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
     try:
-        requests.post(url, json=payload)
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Failed to send telegram message: {e}")
 
-def send_telegram_photo(photo_path, caption):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    try:
-        with open(photo_path, 'rb') as photo:
-            payload = {"chat_id": CHAT_ID, "caption": caption, "parse_mode": "Markdown"}
-            files = {"photo": photo}
-            requests.post(url, data=payload, files=files)
-    except Exception as e:
-        print(f"Error sending photo: {e}")
-
-def generate_chart_image(df, signal_type, s1, r1):
-    file_path = "chart.png"
-    plt.figure(figsize=(10, 6))
-    recent_df = df.tail(35)
-    plt.plot(recent_df.index, recent_df['Close'], label='Nifty 5m Price', color='#1f77b4', linewidth=2)
-    plt.plot(recent_df.index, recent_df['ST'], label='Supertrend (7,3)', color='#ff7f0e', linestyle='--', linewidth=1.5)
-    plt.axhline(y=s1, color='green', linestyle=':', label=f'Support (S1): {s1}')
-    plt.axhline(y=r1, color='red', linestyle=':', label=f'Resistance (R1): {r1}')
-    plt.title(f"📊 NIFTY 5M CHART - {signal_type} SIGNAL", fontsize=12, fontweight='bold')
-    plt.xlabel("Time")
-    plt.ylabel("Nifty Spot Price")
-    plt.legend(loc='upper left')
-    plt.grid(True, linestyle=':', alpha=0.6)
-    plt.tight_layout()
-    plt.savefig(file_path, dpi=150)
-    plt.close()
-    return file_path
+@app.route('/')
+def home():
+    """Render ची सर्व्हर लिंक जिवंत ठेवण्यासाठी होम रूट"""
+    return "Bot is running perfectly!"
 
 def get_levels():
-    df = yf.download(tickers='^NSEI', period='2d', interval='1d', progress=False)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    prev_day = df.iloc[-2]
-    high, low, close = prev_day['High'], prev_day['Low'], prev_day['Close']
-    pivot = (high + low + close) / 3
-    r1 = (2 * pivot) - low
-    s1 = (2 * pivot) - high
-    return round(s1, 2), round(r1, 2), round(pivot, 2)
-
-def send_morning_levels():
+    """पिव्होट आणि S1/R1 लेव्हल्स काढण्यासाठी फंक्शन"""
     try:
-        s1, r1, pivot = get_levels()
-        msg = (
-            f"🌅 *GOOD MORNING! TODAY'S NIFTY SR LEVELS*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 *Pivot Point:* `{pivot}`\n"
-            f"🟢 *Strong Support (S1):* `{s1}`\n"
-            f"🔴 *Strong Resistance (R1):* `{r1}`\n"
-            f"━━━━━━━━━━━━━━\n"                                                                                      
-            f"🚀 *Supertrend Algo Strategy Active!*"
-        )
-        send_telegram_msg(msg)
+        df = yf.download(tickers='^NSEI', period='2d', interval='1d', progress=False)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+            
+        if len(df) >= 2:
+            prev_day = df.iloc[-2]
+            high = prev_day['High']
+            low = prev_day['Low']
+            close = prev_day['Close']
+            
+            pivot = (high + low + close) / 3
+            r1 = (2 * pivot) - low
+            s1 = (2 * pivot) - high
+            return round(s1, 2), round(r1, 2), round(pivot, 2)
     except Exception as e:
-        print(f"Error: {e}")
-    
+        print(f"Error in get_levels: {e}")
+    return None, None, None
+
 def check_signals():
+    """सुपरट्रेंड सिग्नल्स आणि ट्रेडिंग लॉजिक तपासण्यासाठी फंक्शन"""
     try:
         global current_trade
-        df = yfinance.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
+        df = yf.download(tickers='^NSEI', period='5d', interval='5m', progress=False)
 
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
@@ -116,94 +72,37 @@ def check_signals():
         curr_dir = df['ST_DIR'].iloc[-1]
 
         s1, r1, pivot = get_levels()
-    def check_signals():
-    try:
-        global current_trade
-
-        df = yf.download(
-            tickers='^NSEI',
-            period='5d',
-            interval='5m',
-            progress=False
-        )
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        if df.empty or len(df) < 20:
-            return
-
-        st = ta.supertrend(
-            df['High'],
-            df['Low'],
-            df['Close'],
-            length=7,
-            multiplier=3
-        )
-
-        df['ST'] = st['SUPERT_7_3_0']
-        df['ST_DIR'] = st['SUPERTd_7_3_0']
-
-        latest_price = round(df['Close'].iloc[-1], 2)
-        prev_dir = df['ST_DIR'].iloc[-2]
-        curr_dir = df['ST_DIR'].iloc[-1]
-
-        s1, r1, pivot = get_levels()
-
-        if current_trade is not None:
-            trade_type = current_trade['type']
-            entry = current_trade['entry']
-            s1 = current_trade['s1']
-            t1 = current_trade['t1']
-            t2 = current_trade['t2']
-            t3 = current_trade['t3']
-
-            if not current_trade['t1_hit']:
-                if (
-                    (trade_type == 'CE' and latest_price >= t1)
-                    or
-                    (trade_type == 'PE' and latest_price <= t1)
-                ):
-                    current_trade['t1_hit'] = True
-                    current_trade['sl'] = entry
-
-                    send_telegram_msg(
-                        f"🎯 *TARGET 1 ACHIEVED (1:2)* ✅\n\n"
-                        f"Price: {latest_price}\n"
-                        f"🔺 Trailing SL moved to Entry: {entry}"
-                    )
-
-            elif not current_trade['t2_hit']:
-                if (
-                    (trade_type == 'CE' and latest_price >= t2)
-                    or
-                    (trade_type == 'PE' and latest_price <= t2)
-                ):
-                    current_trade['t2_hit'] = True
-                    current_trade['sl'] = t1
-
-                    send_telegram_msg(
-                        f"🎯 *TARGET 2 ACHIEVED (1:3)* ✅\n\n"
-                        f"Price: {latest_price}\n"
-                        f"🔺 Trailing SL moved to T1: {t1}"
-                    )
-
     except Exception as e:
-        print(f"Network or Data Error in check_signals: {e}")
+        print(f"Error in check_signals: {e}")
+        return
+
+    # जर आधीपासून ट्रेड चालू असेल तर तो क्लोज (Exit) करण्याचे लॉजिक
+    if current_trade is not None:
+        trade_type = current_trade['type']
         
-def send_telegram_message(chat_id, text):
-    TOKEN = BOT_TOKEN
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text}
-    requests.post(url, json=payload)
-    
-@app.route('/set-webhook')
-def set_webhook():
-    TOKEN = BOT_TOKEN
-    WEBHOOK_URL = "https://nifty-bot-3ega.onrender.com/telegram-webhook"
-    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}"
-    response = requests.get(url)
-    return response.json()
+        if trade_type == 'BUY' and (curr_dir == -1 or latest_price >= r1):
+            send_telegram_message(f"🚨 EXIT BUY: Price {latest_price} (Target or Signal Change)")
+            current_trade = None
+        elif trade_type == 'SELL' and (curr_dir == 1 or latest_price <= s1):
+            send_telegram_message(f"🚨 EXIT SELL: Price {latest_price} (Target or Signal Change)")
+            current_trade = None
+            
+    # जर कोणताही ट्रेड चालू नसेल तर नवीन एंट्री (Entry) घेण्याचे लॉजिक
+    else:
+        if prev_dir == -1 and curr_dir == 1:
+            send_telegram_message(f"🟢🟢 BUY SIGNAL: Entry Price {latest_price} | Target R1: {r1}")
+            current_trade = {'type': 'BUY', 'entry_price': latest_price}
+        elif prev_dir == 1 and curr_dir == -1:
+            send_telegram_message(f"🔴🔴 SELL SIGNAL: Entry Price {latest_price} | Target S1: {s1}")
+            current_trade = {'type': 'SELL', 'entry_price': latest_price}
+
+@app.route('/run-bot')
+def run_bot_cron():
+    """Cron Job द्वारे बॉट दर ५ मिनिटांनी रन करण्यासाठी रूट"""
+    check_signals()
+    return "Bot check completed!"
+
 if __name__ == "__main__":
+    # Render साठी पोर्ट ऑटो-कॉन्फिगरेशन
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host='0.0.0.0', port=port)
