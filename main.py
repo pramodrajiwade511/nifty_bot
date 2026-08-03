@@ -201,9 +201,7 @@ def check_signals():
 @app.route('/')
 def home(): return "Bot is running perfectly!"
 
-
-   
-   if __name__ == "__main__":
+if __name__ == "__main__":
     try:
         send_telegram_message("🤖 टाटा बॉट सुरू झाला आहे! 🚀\nमार्केट सिग्नल्स मॉनिटर करणे सुरू केले आहे...")
     except Exception as e:
