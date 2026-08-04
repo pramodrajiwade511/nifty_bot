@@ -198,15 +198,43 @@ def check_signals():
     except Exception as e: print(f"Error in check_signals: {e}")
     return "Bot checked signals successfully", 200
 
+
+    
 @app.route('/')
-def home(): return "Bot is running perfectly!"
-if __name__ == "__main__":
+def home():
+    print("Cron-job ping received. Accessing market data...")
     try:
-        send_telegram_message("Tata Bot Shuru Jhala Aahe! Market signals monitor karne shuru kele aahe.")
+        from datetime import datetime
+        current_time = datetime.now().strftime("%H:%M")
+        current_day = datetime.now().weekday()
+        
+        if 'good_morning_sent' not in globals():
+            globals()['good_morning_sent'] = False
+
+        if current_time == "09:00" and current_day < 5:
+            if not globals()['good_morning_sent']:
+                send_telegram_message("Good Morning! Tata Bot is Active and Monitoring Market...")
+                globals()['good_morning_sent'] = True
+                print("Good Morning alert sent successfully.")
+        else:
+            if current_time != "09:00":
+                globals()['good_morning_sent'] = False
     except Exception as e:
-        print(f"Error sending welcome message: {e}")
+        print(f"Error in Good Morning alert logic: {e}")
+
+    try:
+        if 'check_signals' in globals():
+            globals()['check_signals']()
+            print("Market data check completed via Cron-job.")
+    except Exception as e:
+        print(f"Error executing trading logic: {e}")
+        
+    return "Bot is running perfectly! Tata Bot is Active.", 200
+if __name__ == "__main__":
+    
+    import os
     port = int(os.environ.get("PORT", 10000))
+    print(f"Starting server on port {port}...")
     app.run(host='0.0.0.0', port=port)
     
-
  
