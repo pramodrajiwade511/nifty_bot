@@ -10,488 +10,218 @@ import numpy as np
 
 app = Flask(__name__)
 
-# Environment Variables
+# Environment Variables (Render वर सेट करा)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-# ट्रेडिंग ट्रॅकिंग आणि मॉर्निंग स्टेटस फ्लॅग्ज
+# ट्रेडिंग ट्रॅकिंग व्हेरिएबल्स
 current_trade = None
 entry_price = 0.0
 stop_loss = 0.0
 daily_trades = []
 
-# दररोज फक्त एकदाच मॉर्निंग मेसेज जाण्यासाठी ट्रॅकर्स
 last_gm_date = ""
 last_levels_date = ""
 
-
 def send_telegram_message(message):
-    if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram BOT_TOKEN किंवा CHAT_ID missing आहे.")
-        return
-
-    # Correct Telegram Bot API URL
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
+    if not BOT_TOKEN or not CHAT_ID: return
+    url = f"https://telegram.org{BOT_TOKEN}/sendMessage"
     try:
-        response = requests.post(
-            url,
-            json={"chat_id": CHAT_ID, "text": message},
-            timeout=10
-        )
-        print(f"Telegram message response: {response.status_code} - {response.text}")
+        requests.post(url, json={"chat_id": CHAT_ID, "text": message}, timeout=10)
     except Exception as e:
         print(f"Error sending message: {e}")
 
-
 def send_telegram_chart(image_path, caption_text):
-    if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram BOT_TOKEN किंवा CHAT_ID missing आहे.")
-        return
-
-    # Correct Telegram Bot API URL
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-
+    if not BOT_TOKEN or not CHAT_ID: return
+    url = f"https://telegram.org{BOT_TOKEN}/sendPhoto"
     try:
-        with open(image_path, "rb") as photo:
-            files = {"photo": photo}
-            data = {
-                "chat_id": CHAT_ID,
-                "caption": caption_text
-            }
-
-            response = requests.post(
-                url,
-                files=files,
-                data=data,
-                timeout=15
-            )
-            print(f"Telegram chart response: {response.status_code} - {response.text}")
-
+        with open(image_path, 'rb') as photo:
+            files = {'photo': photo}
+            data = {'chat_id': CHAT_ID, 'caption': caption_text}
+            requests.post(url, files=files, data=data, timeout=15)
     except Exception as e:
         print(f"Error sending chart: {e}")
 
-
 def get_levels():
     try:
-        df = yf.download(
-            tickers="^NSEI",
-            period="2d",
-            interval="1d",
-            progress=False
-        )
-
+        df = yf.download(tickers="^NSEI", period="2d", interval="1d", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-
         if len(df) >= 2:
             prev_day = df.iloc[-2]
-
-            pivot = (
-                prev_day["High"]
-                + prev_day["Low"]
-                + prev_day["Close"]
-            ) / 3
-
-            r1 = (2 * pivot) - prev_day["Low"]
-            s1 = (2 * pivot) - prev_day["High"]
-
+            pivot = (prev_day['High'] + prev_day['Low'] + prev_day['Close']) / 3
+            r1 = (2 * pivot) - prev_day['Low']
+            s1 = (2 * pivot) - prev_day['High']
             return round(s1, 2), round(r1, 2), round(pivot, 2)
-
     except Exception as e:
         print(f"Error in get_levels: {e}")
-
     return None, None, None
 
-
 def calculate_reports():
-    if not daily_trades:
+    if not daily_trades: 
         return "अजून कोणताही ट्रेड पूर्ण झालेला नाही."
-
-    today_str = datetime.today().strftime("%Y-%m-%d")
-
-    today_pnl = sum(
-        t["pnl"] for t in daily_trades
-        if t["date"] == today_str
-    )
-
-    total_pnl = sum(t["pnl"] for t in daily_trades)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    today_pnl = sum(t['pnl'] for t in daily_trades if t['date'] == today_str)
+    total_pnl = sum(t['pnl'] for t in daily_trades)
     total_trades = len(daily_trades)
-
-    weekly_avg = (
-        total_pnl / total_trades
-        if total_trades > 0
-        else 0
-    )
-
+    weekly_avg = total_pnl / total_trades if total_trades > 0 else 0
+    
     return (
         f"📊 **PERFORMANCE REPORT** 📊\n\n"
-        f"📅 आजचा एकूण नफा/तोटा: ₹{round(today_pnl, 2)}\n"
-        f"🔢 एकूण झालेले ट्रेड्स: {total_trades}\n"
-        f"📈 चालू आठवड्याचा सरासरी नफा: "
-        f"₹{round(weekly_avg, 2)} प्रति ट्रेड\n"
+        f"💰 आजचा एकूण नफा/तोटा: ₹{round(today_pnl, 2)}\n"
+        f"📈 एकूण झालेले ट्रेड्स: {total_trades}\n"
+        f"📉 चालू आठवड्याचा सरासरी नफा: ₹{round(weekly_avg, 2)} प्रति ट्रेड\n"
     )
 
-
-# 🔔 टेलिग्राम मेसेजला उत्तर देणारा रस्ता (Webhook)
-@app.route("/telegram", methods=["POST"])
-def telegram_webhook():
-    try:
-        update = request.get_json()
-
-        if "message" in update:
-            chat_id = update["message"]["chat"]["id"]
-            text = update["message"].get("text", "").lower().strip()
-
-            # /start, hi किंवा hello
-            if text == "/start" or text == "hi" or text == "hello":
-                msg = (
-                    "🟢 Nifty Trading Bot मध्ये आपले स्वागत आहे!\n\n"
-                    "हा बोट लाईव्ह मार्केटमध्ये ऑटोमॅटिक "
-                    "सिग्नल्स आणि कॅन्डलस्टिक चार्ट पाठवेल.\n\n"
-                    "📊 निफ्टीची सध्याची किंमत पाहण्यासाठी "
-                    "**price** टाईप करा."
-                )
-
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-                requests.post(
-                    url,
-                    json={
-                        "chat_id": chat_id,
-                        "text": msg
-                    },
-                    timeout=10
-                )
-
-            # /price किंवा price
-            elif text == "/price" or text == "price":
-                try:
-                    ticker = yf.Ticker("^NSEI")
-                    todays_data = ticker.history(period="1d")
-
-                    if not todays_data.empty:
-                        latest_price = round(
-                            todays_data["Close"].iloc[-1],
-                            2
-                        )
-
-                        msg = (
-                            f"📊 **NIFTY 50 Live Price**\n\n"
-                            f"💰 सध्याची किंमत: ₹{latest_price}\n"
-                            f"🕒 वेळ: {datetime.now().strftime('%H:%M:%S')}\n\n"
-                            f"*(टीप: मार्केट बंद असल्यास ही शेवटची "
-                            f"बंद झालेली किंमत असेल)*"
-                        )
-                    else:
-                        msg = (
-                            "❌ सध्या लाईव्ह डेटा उपलब्ध नाही. "
-                            "मार्केट उघडल्यावर पुन्हा प्रयत्न करा."
-                        )
-
-                except Exception:
-                    msg = "❌ किंमत काढताना अडचण आली."
-
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-                requests.post(
-                    url,
-                    json={
-                        "chat_id": chat_id,
-                        "text": msg
-                    },
-                    timeout=10
-                )
-
-        return "OK", 200
-
-    except Exception as e:
-        print(f"Error handling telegram message: {e}")
-        return "OK", 200
-
-
-# 🕒 दर ५ मिनिटांनी चालणारे मुख्य इंजिन (Cron Endpoint)
-@app.route("/run-bot-cron")
 def check_signals():
-    global current_trade
-    global entry_price
-    global stop_loss
-    global daily_trades
-    global last_gm_date
-    global last_levels_date
-
+    global current_trade, entry_price, stop_loss, daily_trades, last_gm_date, last_levels_date
     try:
         now = datetime.now()
+        today_str = now.strftime('%Y-%m-%d')
+        current_time_str = now.strftime('%H:%M')
 
-        today_str = now.strftime("%Y-%m-%d")
-        current_time_str = now.strftime("%H:%M")
-
-        # 🌅 १. सकाळी ०९:०० चा Good Morning मेसेज लॉजिक
-        if (
-            current_time_str >= "09:00"
-            and current_time_str < "09:10"
-            and last_gm_date != today_str
-        ):
-            send_telegram_message(
-                "🌅 Good Morning!\n"
-                "Nifty Trading Bot आता सक्रिय (Active) झाला आहे "
-                "आणि आजच्या मार्केटवर लक्ष ठेवण्यास तयार आहे! 👍"
-            )
-
+        # 🌅 सकाळी ०९:०० चा Good Morning मेसेज लॉजिक
+        if current_time_str >= "09:00" and current_time_str < "09:15" and last_gm_date != today_str:
+            send_telegram_message("🌅 Good Morning!\nNifty Trading Bot आता सक्रिय (Active) झाला आहे आणि आजच्या賦 मार्केटवर लक्ष ठेवून आहे.")
             last_gm_date = today_str
 
-        # 📊 २. सकाळी ०९:१० चा प्री-मार्केट सपोर्ट/रेझिस्टन्स मेसेज लॉजिक
-        s1, r1, pivot = get_levels()
-
-        if (
-            current_time_str >= "09:10"
-            and current_time_str < "09:20"
-            and last_levels_date != today_str
-        ):
+        # 📍 सकाळी ०९:१० चा प्री-मार्केट रिपोर्ट लेव्हल्स लॉजिक
+        if current_time_str >= "09:10" and current_time_str < "09:25" and last_levels_date != today_str:
+            s1, r1, pivot = get_levels()
             if s1 and r1:
                 levels_msg = (
-                    f"📊 **NIFTY 50 DAILY LEVELS** 📊\n"
-                    f"📅 दिनांक: {today_str}\n\n"
+                    f"📍 **NIFTY 50 DAILY LEVELS** 📍\n"
+                    f"📅 दिनांक: {today_str}\n"
                     f"🚀 मार्केट सुरू होण्यापूर्वीच्या महत्त्वाच्या लेव्हल्स:\n"
-                    f"📈 Resistance (R1): {r1}\n"
-                    f"🎯 Pivot Point: {pivot}\n"
-                    f"📉 Support (S1): {s1}\n\n"
-                    f"💡 (टीप: हे आकडे मागील दिवसाच्या डेटावरून "
-                    f"काढले आहेत. मार्केट ९:१५ ला सुरू होईल.)"
+                    f"🔺 Resistance (R1): {r1}\n"
+                    f"🔹 Pivot Point: {pivot}\n"
+                    f"🔻 Support (S1): {s1}\n"
+                    f"💡 (टीप: हे आकडे मागील दिवसाच्या डेटावरून काढले आहेत, मार्केट ९:१५ ला सुरू होईल.)"
                 )
-
                 send_telegram_message(levels_msg)
                 last_levels_date = today_str
 
-        # ३. मुख्य ट्रेडिंग सिग्नल्स चेकिंग
-        df = yf.download(
-            tickers="^NSEI",
-            period="5d",
-            interval="5m",
-            progress=False
-        )
-
+        # 📈 मुख्य सुपरट्रेंड सिग्नल्स आणि ऑटो ट्रेलिंग लॉजिक
+        df = yf.download(tickers="^NSEI", period="5d", interval="5m", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
+        if df.empty or len(df) < 20: 
+            return
 
-        if df.empty or len(df) < 20:
-            return "Not enough data", 200
+        st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
+        df['ST'] = st['SUPERT_7_3.0']
+        df['ST_DIR'] = st['SUPERTd_7_3.0']
 
-        st = ta.supertrend(
-            df["High"],
-            df["Low"],
-            df["Close"],
-            length=7,
-            multiplier=3
-        )
-
-        df["ST"] = st["SUPERT_7_3.0"]
-        df["ST_DIR"] = st["SUPERTD_7_3.0"]
-
-        latest_price = round(df["Close"].iloc[-1], 2)
-
-        prev_dir = df["ST_DIR"].iloc[-2]
-        curr_dir = df["ST_DIR"].iloc[-1]
-
-        pnl_generated = 0.0
+        latest_price = round(df['Close'].iloc[-1], 2)
+        prev_dir = df['ST_DIR'].iloc[-2]
+        curr_dir = df['ST_DIR'].iloc[-1]
         trade_closed = False
 
-        # Existing BUY trade
-        if current_trade == "BUY":
+        # 🔄 ऑटो ट्रेलिंग स्टॉप लॉस मॅनेजमेंट
+        if current_trade == 'BUY':
             new_sl = latest_price - 10
-
             if new_sl > stop_loss:
-                stop_loss = new_sl
-
-            if latest_price <= stop_loss or curr_dir == -1:
-                pnl_generated = (
-                    latest_price - entry_price
-                ) * 50
-
+                stop_loss = round(new_sl, 2)
+                send_telegram_message(f"🔄 Stop Loss ट्रेल झाला! नवीन SL: {stop_loss}")
+            if latest_price <= stop_loss:
+                pnl_generated = (latest_price - entry_price) * 50
+                send_telegram_message(f"🚨 BUY EXIT! SL HIT\nExit Price: {latest_price}\nPnL: ₹{pnl_generated}")
                 trade_closed = True
 
-                send_telegram_message(
-                    f"❌ EXIT CALL ALERT\n"
-                    f"Price: {latest_price}\n"
-                    f"ट्रेड PnL: ₹{round(pnl_generated, 2)}"
-                )
-
-        # Existing SELL trade
-        elif current_trade == "SELL":
+        elif current_trade == 'SELL':
             new_sl = latest_price + 10
-
-            if stop_loss == 0 or new_sl < stop_loss:
-                stop_loss = new_sl
-
-            if latest_price >= stop_loss or curr_dir == 1:
-                pnl_generated = (
-                    entry_price - latest_price
-                ) * 50
-
+            if stop_loss == 0.0 or new_sl < stop_loss:
+                stop_loss = round(new_sl, 2)
+                send_telegram_message(f"🔄 Stop Loss ट्रेल झाला! नवीन SL: {stop_loss}")
+            if latest_price >= stop_loss:
+                pnl_generated = (entry_price - latest_price) * 50
+                send_telegram_message(f"🚨 SELL EXIT! SL HIT\nExit Price: {latest_price}\nPnL: ₹{pnl_generated}")
                 trade_closed = True
 
-                send_telegram_message(
-                    f"❌ EXIT PUT ALERT\n"
-                    f"Price: {latest_price}\n"
-                    f"ट्रेड PnL: ₹{round(pnl_generated, 2)}"
-                )
-
-        # Trade closed
         if trade_closed:
-            daily_trades.append(
-                {
-                    "date": today_str,
-                    "pnl": pnl_generated
-                }
-            )
-
+            daily_trades.append({'date': today_str, 'pnl': pnl_generated})
             current_trade = None
             send_telegram_message(calculate_reports())
 
-        # New signal
+        # 🟢🔴 नवीन सिग्नल्स एन्ट्री लॉजिक
         if current_trade is None:
             signal_type = None
-
-            # BUY CALL
             if prev_dir == -1 and curr_dir == 1:
-                current_trade = "BUY"
+                current_trade = 'BUY'
                 entry_price = latest_price
-                stop_loss = latest_price - 10
+                stop_loss = entry_price - 15
                 signal_type = "🟢 BUY CALL SIGNAL"
-
-            # BUY PUT
+                send_telegram_message(f"🚀 BUY CALL ALERT!\nEntry Price: {entry_price}\nInitial SL: {stop_loss}")
+                
             elif prev_dir == 1 and curr_dir == -1:
-                current_trade = "SELL"
+                current_trade = 'SELL'
                 entry_price = latest_price
-                stop_loss = latest_price + 10
+                stop_loss = entry_price + 15
                 signal_type = "🔴 BUY PUT SIGNAL"
+                send_telegram_message(f"📉 BUY PUT ALERT!\nEntry Price: {entry_price}\nInitial SL: {stop_loss}")
 
-            # Signal chart
-            if signal_type and s1 and r1:
+            if signal_type:
                 plot_df = df.tail(30).copy()
-
-                arrows = np.full(
-                    len(plot_df),
-                    np.nan
-                )
-
-                if current_trade == "BUY":
-                    arrows[-1] = (
-                        plot_df["Low"].iloc[-1] - 5
-                    )
-                    arrow_marker = "^"
-                    arrow_color = "green"
+                arrows = np.full(len(plot_df), np.nan)
+                if current_trade == 'BUY':
+                    arrows[-1] = plot_df['Low'].iloc[-1] - 5
+                    arrow_marker = '^'; arrow_color = 'green'
                 else:
-                    arrows[-1] = (
-                        plot_df["High"].iloc[-1] + 5
-                    )
-                    arrow_marker = "v"
-                    arrow_color = "red"
+                    arrows[-1] = plot_df['High'].iloc[-1] + 5
+                    arrow_marker = 'v'; arrow_color = 'red'
 
                 additional_plots = [
-                    mpf.make_addplot(
-                        [r1] * len(plot_df),
-                        color="blue",
-                        linestyle="--",
-                        width=1.2
-                    ),
-                    mpf.make_addplot(
-                        [s1] * len(plot_df),
-                        color="orange",
-                        linestyle="--",
-                        width=1.2
-                    ),
-                    mpf.make_addplot(
-                        arrows,
-                        type="scatter",
-                        markersize=100,
-                        marker=arrow_marker,
-                        color=arrow_color
-                    )
+                    mpf.make_addplot(plot_df['ST'], color='blue', linestyle='--', width=1.2),
+                    mpf.make_addplot(arrows, type='scatter', markersize=100, marker=arrow_marker, color=arrow_color)
                 ]
-
-                custom_style = mpf.make_mpf_style(
-                    base_mpf_style="charles",
-                    gridstyle=":",
-                    y_on_right=False
-                )
-
+                custom_style = mpf.make_mpf_style(base_mpf_style='charles', gridstyle='--', y_on_right=False)
                 image_path = "chart.png"
-
-                mpf.plot(
-                    plot_df,
-                    type="candle",
-                    style=custom_style,
-                    addplot=additional_plots,
-                    savefig=image_path,
-                    title=f"Nifty {signal_type}",
-                    volume=False
-                )
-
-                caption = (
-                    f"{signal_type}\n"
-                    f"📊 Entry Price: {entry_price}\n"
-                    f"🛡️ Auto Trailing SL: {stop_loss}\n"
-                    f"📉 S1: {s1} | 📈 R1: {r1}"
-                )
-
-                send_telegram_chart(
-                    image_path,
-                    caption
-                )
+                mpf.plot(plot_df, type='candle', style=custom_style, addplot=additional_plots, savefig=image_path)
+                
+                caption = f"{signal_type}\nEntry Price: {entry_price}\nAuto Trailing SL Active!"
+                send_telegram_chart(image_path, caption)
 
     except Exception as e:
         print(f"Error in check_signals: {e}")
 
-    return "Bot checked signals successfully", 200
-
-
-@app.route("/")
+# --- 🌐 होम रूट (cron-job.org च्या पिंगसाठी - फक्त सर्व्हर चालू ठेवण्यासाठी) ---
+@app.route('/')
 def home():
-    print("Cron-job ping received. Accessing market data...")
-
-    try:
-        current_time = datetime.now().strftime("%H:%M")
-        current_day = datetime.now().weekday()
-
-        if "good_morning_sent" not in globals():
-            globals()["good_morning_sent"] = False
-
-        if current_time == "09:00" and current_day < 5:
-            if not globals()["good_morning_sent"]:
-                send_telegram_message(
-                    "Good Morning! Tata Bot is Active "
-                    "and Monitoring Market..."
-                )
-
-                globals()["good_morning_sent"] = True
-                print("Good Morning alert sent successfully.")
-
-        else:
-            if current_time != "09:00":
-                globals()["good_morning_sent"] = False
-
-    except Exception as e:
-        print(f"Error in Good Morning alert logic: {e}")
-
-    try:
-        if "check_signals" in globals():
-            globals()["check_signals"]()
-
-        print("Market data check completed via Cron-job.")
-
-    except Exception as e:
-        print(f"Error executing trading logic: {e}")
-
+    print("Cron-job ping received. Keeping server alive!")
+    # सर्व्हर चालू ठेवण्यासोबतच सिग्नल्स आणि मॉर्निंग मेसेज चेक करेल
+    check_signals()
     return "Bot is running perfectly! Tata Bot is Active.", 200
 
+# --- 💬 टेलिग्राम वेबहुक रूट (युजर्सच्या मेसेजला उत्तर देण्यासाठी) ---
+@app.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    try:
+        update = request.get_json()
+        if "message" in update and "text" in update["message"]:
+            chat_id = update["message"]["chat"]["id"]
+            text = update["message"]["text"].lower().strip()
+            
+            # /start कमांडचे उत्तर
+            if text == "/start":
+                reply_message = "👋 Tata Bot Shuru Jhala Aahe! 🦅\nLive market signals ani /price sathi ha bot tayar ahe."
+                requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
+            
+            # /price कमांडचे उत्तर (Live Price)
+            elif text == "/price":
+                print("User requested live price. Fetching from yfinance...")
+                data = yf.download(tickers="^NSEI", period="1d", interval="1m", progress=False)
+                if not data.empty:
+                    latest_price = round(data['Close'].iloc[-1], 2)
+                    reply_message = f"📊 **Live Market Price:**\nNifty 50: ₹{latest_price}"
+                else:
+                    reply_message = "❌ Sadhya market data available nahi. Krupaya thodya velane prayatna kara."
+                requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
+                
+        return "OK", 200
+    except Exception as e:
+        print(f"Error handling telegram message: {e}")
+        return "Error", 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-
-    print(f"Starting server on port {port}...")
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    app.run(host="0.0.0.0", port=port)
