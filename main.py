@@ -198,8 +198,6 @@ def check_signals():
     except Exception as e: print(f"Error in check_signals: {e}")
     return "Bot checked signals successfully", 200
 
-
-    
 @app.route('/')
 def home():
     print("Cron-job ping received. Accessing market data...")
@@ -230,11 +228,53 @@ def home():
         print(f"Error executing trading logic: {e}")
         
     return "Bot is running perfectly! Tata Bot is Active.", 200
+
+# नवीन टेलिग्राम मेसेजेस (/start आणि /price) हाताळण्याचे फंक्शन
+@app.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    try:
+        import requests
+        from flask import request
+        update = request.get_json()
+        if "message" in update and "text" in update["message"]:
+            text = update["message"]["text"].strip()
+            chat_id = update["message"]["chat"]["id"]
+            bot_token = os.environ.get("BOT_TOKEN")
+            url = f"https://telegram.org{bot_token}/sendMessage"
+
+            # अ. /start कमांड आल्यावर वेलकम मेसेज पाठवणे
+            if text == "/start":
+                reply_message = "Tata Bot Shuru Jhala Aahe! 🚀\nLive market signals ani updates sathi ha bot active aahe."
+                payload = {"chat_id": chat_id, "text": reply_message}
+                requests.post(url, json=payload)
+                print("Start reply sent successfully.")
+
+            # ब. /price कमांड आल्यावर लाईव्ह निफ्टी प्राईस पाठवणे
+            elif text == "/price":
+                print("User requested live price. Fetching from yfinance...")
+                import yfinance as yf
+                ticker = "^NSEI"
+                data = yf.download(tickers=ticker, period="1d", interval="1m")
+                
+                if not data.empty:
+                    latest_price = round(data['Close'].iloc[-1], 2)
+                    reply_message = f"📊 Live Market Price:\nNifty 50: ₹{latest_price}"
+                else:
+                    reply_message = "❌ Sadhya market data available nahi. Krupaya thodya velane prayatna kara."
+                
+                payload = {"chat_id": chat_id, "text": reply_message}
+                requests.post(url, json=payload)
+                print("Live price reply sent successfully.")
+
+    except Exception as e:
+        print(f"Error handling telegram message: {e}")
+        
+    return "OK", 200
+
+# मुख्य सर्व्हर चालू करण्याचा ब्लॉक (डबल अंडरस्कोअरसह परफेक्ट सेट केला आहे)
 if __name__ == "__main__":
-    
     import os
     port = int(os.environ.get("PORT", 10000))
     print(f"Starting server on port {port}...")
     app.run(host='0.0.0.0', port=port)
-    
- 
+
