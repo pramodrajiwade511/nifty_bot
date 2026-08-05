@@ -191,37 +191,37 @@ def home():
     # सर्व्हर चालू ठेवण्यासोबतच सिग्नल्स आणि मॉर्निंग मेसेज चेक करेल
     check_signals()
     return "Bot is running perfectly! Tata Bot is Active.", 200
-
-# --- 💬 टेलिग्राम वेबहुक रूट (युजर्सच्या मेसेजला उत्तर देण्यासाठी) ---
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     try:
         update = request.get_json()
-        if "message" in update and "text" in update["message"]:
+        if update and "message" in update and "text" in update["message"]:
             chat_id = update["message"]["chat"]["id"]
             text = update["message"]["text"].lower().strip()
             
-            # /start कमांडचे उत्तर
             if text == "/start":
-                reply_message = "👋 Tata Bot Shuru Jhala Aahe! 🦅\nLive market signals ani /price sathi ha bot tayar ahe."
+                reply_message = "😊 Tata Bot Shuru Jhala Aahe! \nLive market signals, /price ani /report sathi ha bot tayar ahe."
                 requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
-            
-            # /price कमांडचे उत्तर (Live Price)
+                
             elif text == "/price":
-                print("User requested live price. Fetching from yfinance...")
                 data = yf.download(tickers="^NSEI", period="1d", interval="1m", progress=False)
                 if not data.empty:
                     latest_price = round(data['Close'].iloc[-1], 2)
-                    reply_message = f"📊 **Live Market Price:**\nNifty 50: ₹{latest_price}"
+                    reply_message = f"📈 Live Market Price: **InNifty 50: {latest_price}**"
                 else:
-                    reply_message = "❌ Sadhya market data available nahi. Krupaya thodya velane prayatna kara."
+                    reply_message = "❌ Sadhya market data available nahi."
                 requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
+                
+            elif text == "/report":
+                report_message = calculate_reports()
+                requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": report_message})
                 
         return "OK", 200
     except Exception as e:
-        print(f"Error handling telegram message: {e}")
+        print(f"Error: {e}")
         return "Error", 500
 
+        
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
