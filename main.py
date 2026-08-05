@@ -191,6 +191,8 @@ def home():
     # सर्व्हर चालू ठेवण्यासोबतच सिग्नल्स आणि मॉर्निंग मेसेज चेक करेल
     check_signals()
     return "Bot is running perfectly! Tata Bot is Active.", 200
+
+
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     try:
@@ -201,8 +203,7 @@ def telegram_webhook():
             
             if text == "/start":
                 reply_message = "😊 Tata Bot Shuru Jhala Aahe! \nLive market signals, /price ani /report sathi ha bot tayar ahe."
-                requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
-                
+                    requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
             elif text == "/price":
                 data = yf.download(tickers="^NSEI", period="1d", interval="1m", progress=False)
                 if not data.empty:
@@ -211,11 +212,11 @@ def telegram_webhook():
                 else:
                     reply_message = "❌ Sadhya market data available nahi."
                 requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
-                
+
             elif text == "/report":
                 report_message = calculate_reports()
                 requests.post(f"https://telegram.org{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": report_message})
-                
+
         return "OK", 200
     except Exception as e:
         print(f"Error: {e}")
