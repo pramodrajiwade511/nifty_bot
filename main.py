@@ -1,4 +1,3 @@
-
 import os
 import requests
 import pandas as pd
@@ -6,7 +5,7 @@ import pandas_ta as ta
 import mplfinance as mpf
 from flask import Flask, request
 import yfinance as yf
-from datetime import import datetime
+from datetime import datetime
 import numpy as np
 
 app = Flask(__name__)
