@@ -102,6 +102,13 @@ def check_signals():
             return
             
         st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
+           
+    print("DataFrame Columns:", df.columns)
+    print("Supertrend Columns:", st.columns)
+    
+    df['ST'] = st['SUPERT_7_3.0']
+    df['ST_DIR'] = st['SUPERTd_7_3.0']
+    
         df['ST'] = st['SUPERT_7_3.0']
         df['ST_DIR'] = st['SUPERTd_7_3.0']
         
