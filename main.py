@@ -73,90 +73,133 @@ def calculate_reports():
 
 def check_signals():
     global current_trade, entry_price, stop_loss, daily_trades, last_gm_date, last_levels_date
+
     try:
         now = datetime.now()
-        today_str = now.strftime('%Y-%m-%d')
-        current_time_str = now.strftime('%H:%M')
-        
+        today_str = now.strftime("%Y-%m-%d")
+        current_time_str = now.strftime("%H:%M")
+
+        # Morning message
         if current_time_str >= "09:00" and current_time_str < "09:15" and last_gm_date != today_str:
-            send_telegram_message("Good Morning! Nifty Trading Bot आता सक्रिय (Active) झाला आहे.")
+            send_telegram_message("🌅 Good Morning! Nifty Trading Bot आता Active झाला आहे.")
             last_gm_date = today_str
-            
+
+        # Nifty daily levels
         if current_time_str >= "09:10" and current_time_str < "09:25" and last_levels_date != today_str:
             s1, r1, pivot = get_levels()
+
             if s1 and r1:
                 levels_msg = (
-                    f"📊 **NIFTY DAILY LEVELS** 📊\n"
-                    f"📅 दिनांक: {today_str}\n"
-                    f"🚀 Resistance (R1): {r1}\n"
-                    f"🎯 Pivot Point: {pivot}\n"
-                    f"📉 Support (S1): {s1}"
+                    f"📊 **NIFTY DAILY LEVELS**\n"
+                    f"📅 Date: {today_str}\n"
+                    f"🔴 Resistance (R1): {r1}\n"
+                    f"🟢 Pivot Point: {pivot}\n"
+                    f"🟢 Support (S1): {s1}"
                 )
+
                 send_telegram_message(levels_msg)
                 last_levels_date = today_str
-                
-        df = yf.download(tickers="^NSEI", period="5d", interval="5m", progress=False)
+
+        # Get Nifty 5 minute data
+        df = yf.download(
+            tickers="^NSEI",
+            period="5d",
+            interval="5m",
+            progress=False
+        )
+
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
+
         if df.empty or len(df) < 20:
             return
-            
-        st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
-           
-    print("DataFrame Columns:", df.columns)
-    print("Supertrend Columns:", st.columns)
-    
-    df['ST'] = st['SUPERT_7_3.0']
-    df['ST_DIR'] = st['SUPERTd_7_3.0']
-    
+
+        # Supertrend
+        st = ta.supertrend(
+            df['High'],
+            df['Low'],
+            df['Close'],
+            length=7,
+            multiplier=3
+        )
+
         df['ST'] = st['SUPERT_7_3.0']
         df['ST_DIR'] = st['SUPERTd_7_3.0']
-        
-        latest_price = round(df['Close'].iloc[-1], 2)
+
+        latest_price = round(float(df['Close'].iloc[-1]), 2)
+
         prev_dir = df['ST_DIR'].iloc[-2]
         curr_dir = df['ST_DIR'].iloc[-1]
+
         trade_closed = False
-        
+        pnl_generated = 0.0
+
+        # =========================
+        # BUY TRADE MANAGEMENT
+        # =========================
         if current_trade == 'BUY':
+
             new_sl = latest_price - 10
+
             if new_sl > stop_loss:
                 stop_loss = round(new_sl, 2)
-                send_telegram_message(f"🔄 Stop Loss ट्रेल झाला! नवीन SL: {stop_loss}")
+
+                send_telegram_message(
+                    f"🔄 Stop Loss Trail झाला!\nनवीन SL: {stop_loss}"
+                )
+
             if latest_price <= stop_loss:
+
                 pnl_generated = (latest_price - entry_price) * 50
-                send_telegram_message(f"🚨 BUY EXIT! SL Hit\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
+
+                send_telegram_message(
+                    f"🚨 BUY EXIT! SL Hit\n"
+                    f"Exit Price: {latest_price}\n"
+                    f"PnL: ₹{round(pnl_generated, 2)}"
+                )
+
                 trade_closed = True
-                
+
+        # =========================
+        # SELL TRADE MANAGEMENT
+        # =========================
         elif current_trade == 'SELL':
+
             new_sl = latest_price + 10
+
             if stop_loss == 0.0 or new_sl < stop_loss:
                 stop_loss = round(new_sl, 2)
-                send_telegram_message(f"🔄 Stop Loss ट्रेल झाला! नवीन SL: {stop_loss}")
-            if latest_price >= stop_loss:
-                pnl_generated = (entry_price - latest_price) * 50
-                send_telegram_message(f"🚨 SELL EXIT! SL Hit\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
-                trade_closed = True
-                
-        if trade_closed:
-            daily_trades.append({'date': today_str, 'pnl': pnl_generated})
-            current_trade = None
-            send_telegram_message(calculate_reports())
-            
-        if current_trade is None:
-            if prev_dir == -1 and curr_dir == 1:
-                current_trade = 'BUY'
-                entry_price = latest_price
-                stop_loss = entry_price - 15
-                send_telegram_message(f"🚀 **BUY CALL SIGNAL**\nEntry Price: {entry_price}\nInitial SL: {stop_loss}")
-            elif prev_dir == 1 and curr_dir == -1:
-                current_trade = 'SELL'
-                entry_price = latest_price
-                stop_loss = entry_price + 15
-                send_telegram_message(f"📉 **BUY PUT SIGNAL**\nEntry Price: {entry_price}\nInitial SL: {stop_loss}")
-                
-    except Exception as e:
-        print(f"Error in check_signals: {e}")
 
+                send_telegram_message(
+                    f"🔄 Stop Loss Trail झाला!\nनवीन SL: {stop_loss}"
+                )
+
+            if latest_price >= stop_loss:
+
+                pnl_generated = (entry_price - latest_price) * 50
+
+                send_telegram_message(
+                    f"🚨 SELL EXIT! SL Hit\n"
+                    f"Exit Price: {latest_price}\n"
+                    f"PnL: ₹{round(pnl_generated, 2)}"
+                )
+
+                trade_closed = True
+
+        # =========================
+        # TRADE CLOSED
+        # =========================
+        if trade_closed:
+
+            daily_trades.append({
+                'date': today_str,
+                'pnl': pnl_generated
+            })
+
+
+            current_trade = None
+
+            send_telegram_message(calculate_reports())     
 @app.route('/')
 def home():
     print("Cron-job ping received. Keeping server alive!")
