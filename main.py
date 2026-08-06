@@ -1,4 +1,3 @@
-
 import os
 import requests
 import pandas as pd
@@ -66,6 +65,46 @@ def get_supertrend_columns(st_df):
         elif c.startswith('SUPERT_'):
             st_col = c
     return st_col, dir_col
+
+
+def get_option_strikes(price, signal_type):
+    """
+    Nifty spot pricevaroon ATM, ITM, OTM strikes kadhto.
+    signal_type 'BUY' -> Call (CE) options, 'SELL' -> Put (PE) options
+    Strikes 50 chya multiples madhe round kartat.
+    """
+    atm = round(price / 50) * 50
+    option_type = "CE" if signal_type == "BUY" else "PE"
+
+    if option_type == "CE":
+        itm = atm - 50   # kami strike call sathi ITM
+        otm = atm + 50   # jasta strike call sathi OTM
+    else:
+        itm = atm + 50   # jasta strike put sathi ITM
+        otm = atm - 50   # kami strike put sathi OTM
+
+    return {
+        "ATM": f"{atm} {option_type}",
+        "ITM": f"{itm} {option_type}",
+        "OTM": f"{otm} {option_type}",
+    }
+
+
+def get_targets(entry_price, sl_price, signal_type):
+    """
+    Risk-Reward vaparun T1, T2, T3 target kadhto.
+    Risk = entry ani SL madhla farak. T1=1x risk, T2=2x risk, T3=3x risk.
+    """
+    risk = abs(entry_price - sl_price)
+    if signal_type == 'BUY':
+        t1 = round(entry_price + risk * 1, 2)
+        t2 = round(entry_price + risk * 2, 2)
+        t3 = round(entry_price + risk * 3, 2)
+    else:
+        t1 = round(entry_price - risk * 1, 2)
+        t2 = round(entry_price - risk * 2, 2)
+        t3 = round(entry_price - risk * 3, 2)
+    return {"T1": t1, "T2": t2, "T3": t3}
 
 
 def generate_signal_chart(df, signal_type, price_level, sl_price):
@@ -260,18 +299,36 @@ def check_signals():
                 current_trade = 'BUY'
                 entry_price = latest_price
                 stop_loss = entry_price - 15
-                send_telegram_message(f"🟢 **BUY CALL SIGNAL**\nEntry Price: {entry_price}\nInitial SL: {stop_loss}")
+                strikes = get_option_strikes(entry_price, 'BUY')
+                targets = get_targets(entry_price, stop_loss, 'BUY')
+                send_telegram_message(
+                    f"🟢 **BUY CALL SIGNAL**\nEntry Price: {entry_price}\nInitial SL: {stop_loss}\n\n"
+                    f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
+                    f"📌 Option Strikes:\n"
+                    f"ATM: {strikes['ATM']}\n"
+                    f"ITM: {strikes['ITM']}\n"
+                    f"OTM: {strikes['OTM']}"
+                )
                 chart_path = generate_signal_chart(df, 'BUY', entry_price, stop_loss)
                 if chart_path:
-                    send_telegram_chart(chart_path, f"BUY CALL | Entry: {entry_price} | SL: {stop_loss}")
+                    send_telegram_chart(chart_path, f"BUY CALL | Entry: {entry_price} | SL: {stop_loss} | ATM: {strikes['ATM']}")
             elif prev_dir == 1 and curr_dir == -1:
                 current_trade = 'SELL'
                 entry_price = latest_price
                 stop_loss = entry_price + 15
-                send_telegram_message(f"🔴 **BUY PUT SIGNAL**\nEntry Price: {entry_price}\nInitial SL: {stop_loss}")
+                strikes = get_option_strikes(entry_price, 'SELL')
+                targets = get_targets(entry_price, stop_loss, 'SELL')
+                send_telegram_message(
+                    f"🔴 **BUY PUT SIGNAL**\nEntry Price: {entry_price}\nInitial SL: {stop_loss}\n\n"
+                    f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
+                    f"📌 Option Strikes:\n"
+                    f"ATM: {strikes['ATM']}\n"
+                    f"ITM: {strikes['ITM']}\n"
+                    f"OTM: {strikes['OTM']}"
+                )
                 chart_path = generate_signal_chart(df, 'SELL', entry_price, stop_loss)
                 if chart_path:
-                    send_telegram_chart(chart_path, f"BUY PUT | Entry: {entry_price} | SL: {stop_loss}")
+                    send_telegram_chart(chart_path, f"BUY PUT | Entry: {entry_price} | SL: {stop_loss} | ATM: {strikes['ATM']}")
 
     except Exception as e:
         print(f"Error in check_signals: {e}")
