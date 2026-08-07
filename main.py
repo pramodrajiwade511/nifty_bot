@@ -27,6 +27,12 @@ current_s1 = None
 current_r1 = None
 current_pivot = None
 
+last_status_price = None
+last_status_dir = None
+last_status_time = None
+last_error_msg = None
+last_error_date = ""
+
 
 def send_telegram_message(message):
     if not BOT_TOKEN or not CHAT_ID:
@@ -218,6 +224,7 @@ def calculate_reports():
 def check_signals():
     global current_trade, entry_price, stop_loss, daily_trades, last_gm_date, last_levels_date
     global current_s1, current_r1, current_pivot
+    global last_status_price, last_status_dir, last_status_time, last_error_msg, last_error_date
     try:
         now = datetime.now(IST)
         today_str = now.strftime('%Y-%m-%d')
@@ -249,12 +256,20 @@ def check_signals():
         df = yf.download(tickers="^NSEI", period="5d", interval="5m", progress=False)
         df = fix_multiindex(df)
         if df.empty or len(df) < 20:
+            err = "yfinance data empty ahe kiva 20 peksha kami rows aahet"
+            if last_error_msg != err or last_error_date != today_str:
+                send_telegram_message(f"⚠️ Bot Warning: {err}")
+                last_error_msg, last_error_date = err, today_str
             return
 
         st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
         st_col, dir_col = get_supertrend_columns(st)
         if st_col is None or dir_col is None:
-            print(f"Error: Supertrend columns not found. Available columns: {st.columns.tolist()}")
+            err = f"Supertrend column sapadla nahi. Available: {st.columns.tolist()}"
+            print(f"Error: {err}")
+            if last_error_msg != err or last_error_date != today_str:
+                send_telegram_message(f"⚠️ Bot Warning: {err}")
+                last_error_msg, last_error_date = err, today_str
             return
 
         df['ST'] = st[st_col]
@@ -263,6 +278,11 @@ def check_signals():
         latest_price = round(df['Close'].iloc[-1], 2)
         prev_dir = df['ST_DIR'].iloc[-2]
         curr_dir = df['ST_DIR'].iloc[-1]
+
+        # /status command sathi latest values save karto
+        last_status_price = latest_price
+        last_status_dir = curr_dir
+        last_status_time = now.strftime('%H:%M:%S')
 
         trade_closed = False
 
@@ -335,6 +355,11 @@ def check_signals():
 
     except Exception as e:
         print(f"Error in check_signals: {e}")
+        err_text = str(e)
+        today_str2 = datetime.now(IST).strftime('%Y-%m-%d')
+        if last_error_msg != err_text or last_error_date != today_str2:
+            send_telegram_message(f"⚠️ Bot Error (check_signals): {err_text}")
+            last_error_msg, last_error_date = err_text, today_str2
 
 
 @app.route('/')
@@ -346,6 +371,7 @@ def home():
 
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
+    global last_status_price, last_status_dir, last_status_time, last_error_msg
     try:
         update = request.get_json()
         if not update or "message" not in update or "text" not in update["message"]:
@@ -355,7 +381,7 @@ def telegram_webhook():
         text = update["message"]["text"].lower().strip()
 
         if text == "/start":
-            reply_message = "😊 Tata Bot Shuru Jhala Aahe!\nLive market signals, /price ani /report sathi ha bot tayar aahe."
+            reply_message = "😊 Tata Bot Shuru Jhala Aahe!\nLive market signals sathi /price, /report ani /status commands vapra."
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": reply_message})
 
         elif text == "/price":
@@ -371,6 +397,27 @@ def telegram_webhook():
         elif text == "/report":
             report_message = calculate_reports()
             requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": report_message})
+
+        elif text == "/status":
+            dir_text = "माहीत नाही"
+            if last_status_dir == 1:
+                dir_text = "🟢 UPTREND"
+            elif last_status_dir == -1:
+                dir_text = "🔴 DOWNTREND"
+
+            trade_text = current_trade if current_trade else "कोणताही ट्रेड ओपन नाही"
+
+            status_message = (
+                f"🔍 **BOT STATUS**\n\n"
+                f"⏱️ शेवटचा चेक: {last_status_time or 'अजून चेक झालेला नाही'}\n"
+                f"💹 शेवटची किंमत: {last_status_price or 'N/A'}\n"
+                f"📈 सध्याचा ट्रेंड: {dir_text}\n"
+                f"📌 सध्याचा ट्रेड: {trade_text}\n"
+            )
+            if last_error_msg:
+                status_message += f"\n⚠️ शेवटची एरर: {last_error_msg}"
+
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": status_message})
 
         return "OK", 200
     except Exception as e:
