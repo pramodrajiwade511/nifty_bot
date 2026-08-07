@@ -6,9 +6,12 @@ import mplfinance as mpf
 from flask import Flask, request
 import yfinance as yf
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import numpy as np
 
 app = Flask(__name__)
+
+IST = ZoneInfo("Asia/Kolkata")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -161,7 +164,7 @@ def generate_signal_chart(df, signal_type, price_level, sl_price):
             'SELL_EXIT': 'NIFTY 50 — SELL EXIT (SL HIT)',
         }
 
-        image_path = f"/tmp/chart_{signal_type}_{datetime.now().strftime('%H%M%S')}.png"
+        image_path = f"/tmp/chart_{signal_type}_{datetime.now(IST).strftime('%H%M%S')}.png"
 
         mpf.plot(
             chart_df,
@@ -198,7 +201,7 @@ def get_levels():
 def calculate_reports():
     if not daily_trades:
         return "अजून कोणताही ट्रेड पूर्ण झाला नाही."
-    today_str = datetime.today().strftime('%Y-%m-%d')
+    today_str = datetime.now(IST).strftime('%Y-%m-%d')
     today_pnl = sum(t['pnl'] for t in daily_trades if t['date'] == today_str)
     total_pnl = sum(t['pnl'] for t in daily_trades)
     total_trades = len(daily_trades)
@@ -216,7 +219,7 @@ def check_signals():
     global current_trade, entry_price, stop_loss, daily_trades, last_gm_date, last_levels_date
     global current_s1, current_r1, current_pivot
     try:
-        now = datetime.now()
+        now = datetime.now(IST)
         today_str = now.strftime('%Y-%m-%d')
         current_time_str = now.strftime('%H:%M')
         weekday = now.weekday()  # 0=Monday ... 5=Saturday, 6=Sunday
