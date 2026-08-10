@@ -264,6 +264,13 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     df = yf.download(tickers=ticker, period="5d", interval="5m", progress=False)
     df = fix_multiindex(df)
     if df.empty or len(df) < 20:
+        # yfinance kadhi kadhi temporary glitch deta - ekda parat try karto
+        import time
+        time.sleep(2)
+        df = yf.download(tickers=ticker, period="5d", interval="5m", progress=False)
+        df = fix_multiindex(df)
+
+    if df.empty or len(df) < 20:
         err = f"{display_name}: yfinance data empty ahe kiva 20 peksha kami rows aahet"
         if last_error_msg != err or last_error_date != today_str:
             send_telegram_message(f"⚠️ Bot Warning: {err}")
