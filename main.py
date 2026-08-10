@@ -277,7 +277,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             last_error_msg, last_error_date = err, today_str
         return
 
-    st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=3)
+    st = ta.supertrend(df['High'], df['Low'], df['Close'], length=10, multiplier=2)
     st_col, dir_col = get_supertrend_columns(st)
     if st_col is None or dir_col is None:
         err = f"{display_name}: Supertrend column sapadla nahi. Available: {st.columns.tolist()}"
@@ -290,28 +290,32 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     df['ST'] = st[st_col]
     df['ST_DIR'] = st[dir_col]
 
-    # --- Confirmation indicators: RSI + VWAP (fakt 2, sopa thevnyasathi) ---
+    # --- Confirmation indicators: RSI + EMA(9,21) ---
+    # VWAP kadhla - Index (Nifty/BankNifty) sathi Yahoo Finance volume denat nahi,
+    # tyamule VWAP kayam NaN yet hota ani confirmation kadhich pass hot navhta.
     df['RSI'] = ta.rsi(df['Close'], length=14)
-    df['VWAP'] = ta.vwap(df['High'], df['Low'], df['Close'], df['Volume'])
+    df['EMA9'] = ta.ema(df['Close'], length=9)
+    df['EMA21'] = ta.ema(df['Close'], length=21)
 
     latest_price = round(df['Close'].iloc[-1], 2)
     prev_dir = df['ST_DIR'].iloc[-2]
     curr_dir = df['ST_DIR'].iloc[-1]
 
     latest_rsi = df['RSI'].iloc[-1]
-    latest_vwap = df['VWAP'].iloc[-1]
+    latest_ema9 = df['EMA9'].iloc[-1]
+    latest_ema21 = df['EMA21'].iloc[-1]
 
-    # BUY confirm: RSI bullish zone, price VWAP peksha var
-    buy_confirmed = latest_rsi > 50 and latest_price > latest_vwap
+    # BUY confirm: RSI bullish zone, fast EMA slow EMA peksha var (short-term uptrend)
+    buy_confirmed = latest_rsi > 50 and latest_ema9 > latest_ema21
     # SELL confirm: ulta
-    sell_confirmed = latest_rsi < 50 and latest_price < latest_vwap
+    sell_confirmed = latest_rsi < 50 and latest_ema9 < latest_ema21
 
     # /status command sathi latest values save karto
     s["last_status_price"] = latest_price
     s["last_status_dir"] = curr_dir
     s["last_status_time"] = now.strftime('%H:%M:%S')
     s["last_rsi"] = round(latest_rsi, 1) if not pd.isna(latest_rsi) else None
-    s["last_vwap"] = round(latest_vwap, 2) if not pd.isna(latest_vwap) else None
+    s["last_vwap"] = None  # ata vaparat nahi, EMA vaparto
 
     # Trade active असताना pratyek check la fakt price update pathavto, SL hit hoiparyant
     if s["current_trade"] is not None:
@@ -362,7 +366,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                 f"🟢 **{display_name} BUY CALL SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
-                f"✅ Confirmation: RSI {round(latest_rsi,1)} | Price > VWAP\n\n"
+                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend)\n\n"
                 f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
                 f"📌 इतर Strike Options:\n"
                 f"ITM: {strikes['ITM']}\n"
@@ -381,7 +385,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                 f"🔴 **{display_name} BUY PUT SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
-                f"✅ Confirmation: RSI {round(latest_rsi,1)} | Price < VWAP\n\n"
+                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend)\n\n"
                 f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
                 f"📌 इतर Strike Options:\n"
                 f"ITM: {strikes['ITM']}\n"
@@ -472,7 +476,7 @@ def telegram_webhook():
                     f"💹 शेवटची किंमत: {s['last_status_price'] or 'N/A'}\n"
                     f"📈 सध्याचा ट्रेंड: {dir_text}\n"
                     f"📌 सध्याचा ट्रेड: {trade_text}\n"
-                    f"📐 RSI: {s['last_rsi'] or 'N/A'} | VWAP: {s['last_vwap'] or 'N/A'}"
+                    f"📐 RSI: {s['last_rsi'] or 'N/A'}"
                 )
             if last_error_msg:
                 lines.append(f"\n⚠️ शेवटची एरर: {last_error_msg}")
