@@ -36,6 +36,8 @@ state = {
         "last_status_price": None,
         "last_status_dir": None,
         "last_status_time": None,
+        "last_rsi": None,
+        "last_vwap": None,
     }
     for sym in SYMBOLS
 }
@@ -281,14 +283,32 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     df['ST'] = st[st_col]
     df['ST_DIR'] = st[dir_col]
 
+    # --- Confirmation indicators: RSI + VWAP (fakt 2, sopa thevnyasathi) ---
+    df['RSI'] = ta.rsi(df['Close'], length=14)
+    df['VWAP'] = ta.vwap(df['High'], df['Low'], df['Close'], df['Volume'])
+
     latest_price = round(df['Close'].iloc[-1], 2)
     prev_dir = df['ST_DIR'].iloc[-2]
     curr_dir = df['ST_DIR'].iloc[-1]
+
+    latest_rsi = df['RSI'].iloc[-1]
+    latest_vwap = df['VWAP'].iloc[-1]
+
+    # BUY confirm: RSI bullish zone, price VWAP peksha var
+    buy_confirmed = latest_rsi > 50 and latest_price > latest_vwap
+    # SELL confirm: ulta
+    sell_confirmed = latest_rsi < 50 and latest_price < latest_vwap
 
     # /status command sathi latest values save karto
     s["last_status_price"] = latest_price
     s["last_status_dir"] = curr_dir
     s["last_status_time"] = now.strftime('%H:%M:%S')
+    s["last_rsi"] = round(latest_rsi, 1) if not pd.isna(latest_rsi) else None
+    s["last_vwap"] = round(latest_vwap, 2) if not pd.isna(latest_vwap) else None
+
+    # Trade active असताना pratyek check la fakt price update pathavto, SL hit hoiparyant
+    if s["current_trade"] is not None:
+        send_telegram_message(f"{display_name}: {latest_price}")
 
     trade_closed = False
     pnl_generated = 0
@@ -325,7 +345,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         send_telegram_message(calculate_reports(symbol_key))
 
     if s["current_trade"] is None:
-        if prev_dir == -1 and curr_dir == 1:
+        if prev_dir == -1 and curr_dir == 1 and buy_confirmed:
             s["current_trade"] = 'BUY'
             s["entry_price"] = latest_price
             s["stop_loss"] = latest_price - 15
@@ -335,6 +355,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                 f"🟢 **{display_name} BUY CALL SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
+                f"✅ Confirmation: RSI {round(latest_rsi,1)} | Price > VWAP\n\n"
                 f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
                 f"📌 इतर Strike Options:\n"
                 f"ITM: {strikes['ITM']}\n"
@@ -343,7 +364,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             chart_path = generate_signal_chart(df, 'BUY', latest_price, s["stop_loss"], symbol_key)
             if chart_path:
                 send_telegram_chart(chart_path, f"{display_name} BUY CALL | Entry: {latest_price} | SL: {s['stop_loss']} | ATM: {strikes['ATM']}")
-        elif prev_dir == 1 and curr_dir == -1:
+        elif prev_dir == 1 and curr_dir == -1 and sell_confirmed:
             s["current_trade"] = 'SELL'
             s["entry_price"] = latest_price
             s["stop_loss"] = latest_price + 15
@@ -353,6 +374,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                 f"🔴 **{display_name} BUY PUT SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
+                f"✅ Confirmation: RSI {round(latest_rsi,1)} | Price < VWAP\n\n"
                 f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
                 f"📌 इतर Strike Options:\n"
                 f"ITM: {strikes['ITM']}\n"
@@ -442,7 +464,8 @@ def telegram_webhook():
                     f"⏱️ शेवटचा चेक: {s['last_status_time'] or 'अजून चेक झालेला नाही'}\n"
                     f"💹 शेवटची किंमत: {s['last_status_price'] or 'N/A'}\n"
                     f"📈 सध्याचा ट्रेंड: {dir_text}\n"
-                    f"📌 सध्याचा ट्रेड: {trade_text}"
+                    f"📌 सध्याचा ट्रेड: {trade_text}\n"
+                    f"📐 RSI: {s['last_rsi'] or 'N/A'} | VWAP: {s['last_vwap'] or 'N/A'}"
                 )
             if last_error_msg:
                 lines.append(f"\n⚠️ शेवटची एरर: {last_error_msg}")
