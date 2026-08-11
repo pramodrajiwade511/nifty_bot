@@ -539,6 +539,32 @@ def home():
     return "Bot is running perfectly! Tata Bot is Active.", 200
 
 
+@app.route('/test-broker')
+def test_broker():
+    """
+    Shell access nasel (free plan var) tar hya URL var browser madhe javun
+    Angel One connection test karता येते. Result Telegram var pathavla jato,
+    ani browser var pan dakhavla jato.
+    """
+    if not BROKER_AVAILABLE:
+        msg = "❌ broker.py load zala nahi (package install issue असू शकतो)."
+        send_telegram_message(msg)
+        return msg, 200
+
+    try:
+        session = broker.get_smart_api_session()
+        if session:
+            msg = "✅ Angel One session यशस्वी झाले! Connection working ahe."
+        else:
+            msg = "❌ Angel One session fail zala. Credentials (API_KEY/CLIENT_CODE/PASSWORD/TOTP_SECRET) check kara."
+        send_telegram_message(msg)
+        return msg, 200
+    except Exception as e:
+        err_msg = f"❌ Broker test error: {e}"
+        send_telegram_message(err_msg)
+        return err_msg, 200
+
+
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     try:
