@@ -7,5 +7,7 @@ requests
 matplotlib
 flask
 pandas-ta
-mplfismartapi-python
-pyotpnance
+mplfinance
+smartapi-python
+pyotp
+
