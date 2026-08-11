@@ -9,6 +9,15 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import numpy as np
 
+# broker.py cha Angel One integration - nasel/fail zala tar bot band pडत nahi,
+# fakt live premium ऐवजी estimate vaparला जाईल
+try:
+    import broker
+    BROKER_AVAILABLE = True
+except Exception as e:
+    print(f"broker.py load error (estimated premium vaparla jaईl): {e}")
+    BROKER_AVAILABLE = False
+
 app = Flask(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -38,6 +47,8 @@ state = {
         "last_status_time": None,
         "last_rsi": None,
         "last_vwap": None,
+        "atm_strike": None,
+        "targets": None,
     }
     for sym in SYMBOLS
 }
@@ -127,6 +138,41 @@ def get_targets(entry_price, sl_price, signal_type):
         t2 = round(entry_price - risk * 2, 2)
         t3 = round(entry_price - risk * 3, 2)
     return {"T1": t1, "T2": t2, "T3": t3}
+
+
+ATM_DELTA_ESTIMATE = 0.5  # ATM option cha delta साधारण 0.5 astoy - ha fakt ढोबळ अंदाज ahे
+
+
+def get_estimated_premium_moves(entry_price, sl_price, targets):
+    """
+    Live option-chain data नाहीये, tyamule real premium dakhavता येत नाही.
+    ATM Delta ~0.5 gruhit dharun, spot movement varun premium madhe
+    andaje kiती point change hoईl te kadhto. Ha FAKT ANDAJ ahe,
+    actual premium IV/theta/time decay var avalambun asto.
+    """
+    risk = abs(entry_price - sl_price)
+    sl_move = round(risk * ATM_DELTA_ESTIMATE, 1)
+    t1_move = round(abs(targets['T1'] - entry_price) * ATM_DELTA_ESTIMATE, 1)
+    t2_move = round(abs(targets['T2'] - entry_price) * ATM_DELTA_ESTIMATE, 1)
+    t3_move = round(abs(targets['T3'] - entry_price) * ATM_DELTA_ESTIMATE, 1)
+    return {"SL": sl_move, "T1": t1_move, "T2": t2_move, "T3": t3_move}
+
+
+def try_get_real_premium(symbol_key, strike, option_type):
+    """
+    Angel One var connect ahe ka te bघून, khara live option premium (LTP)
+    fetch karण्याचा प्रयत्न karto. Koणतीही adchan aali (session nahi, symbol
+    nahi sapadla, internet issue) tar None deto - tyavelela caller ne
+    estimated premium vaparava.
+    """
+    if not BROKER_AVAILABLE:
+        return None
+    try:
+        name = "NIFTY" if symbol_key == "NIFTY" else "BANKNIFTY"
+        return broker.get_option_premium(name, strike, option_type)
+    except Exception as e:
+        print(f"Real premium fetch error: {e}")
+        return None
 
 
 def generate_signal_chart(df, signal_type, price_level, sl_price, symbol_key):
@@ -317,9 +363,23 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     s["last_rsi"] = round(latest_rsi, 1) if not pd.isna(latest_rsi) else None
     s["last_vwap"] = None  # ata vaparat nahi, EMA vaparto
 
-    # Trade active असताना pratyek check la fakt price update pathavto, SL hit hoiparyant
-    if s["current_trade"] is not None:
-        send_telegram_message(f"{display_name}: {latest_price}")
+    # Trade active असताना pratyek check la professional style update pathavto
+    if s["current_trade"] is not None and s["targets"]:
+        t = s["targets"]
+        if s["current_trade"] == 'BUY':
+            t1_hit = "✅" if latest_price >= t['T1'] else "⏳"
+            t2_hit = "✅" if latest_price >= t['T2'] else "⏳"
+            t3_hit = "✅" if latest_price >= t['T3'] else "⏳"
+        else:
+            t1_hit = "✅" if latest_price <= t['T1'] else "⏳"
+            t2_hit = "✅" if latest_price <= t['T2'] else "⏳"
+            t3_hit = "✅" if latest_price <= t['T3'] else "⏳"
+
+        send_telegram_message(
+            f"📍 {display_name} {s['atm_strike']}\n"
+            f"Spot: {latest_price} | SL: {s['stop_loss']}\n"
+            f"T1: {t['T1']} {t1_hit} | T2: {t['T2']} {t2_hit} | T3: {t['T3']} {t3_hit}"
+        )
 
     trade_closed = False
     pnl_generated = 0
@@ -336,6 +396,10 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             if chart_path:
                 send_telegram_chart(chart_path, f"{display_name} BUY EXIT | Exit: {latest_price} | P&L: ₹{pnl_generated}")
             trade_closed = True
+        elif current_time_str >= "15:20":
+            pnl_generated = (latest_price - s["entry_price"]) * lot_size
+            send_telegram_message(f"🌇 {display_name} DAY END SQUARE OFF (Carry Forward Nahi)\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
+            trade_closed = True
 
     elif s["current_trade"] == 'SELL':
         new_sl = latest_price + 10
@@ -349,25 +413,52 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             if chart_path:
                 send_telegram_chart(chart_path, f"{display_name} SELL EXIT | Exit: {latest_price} | P&L: ₹{pnl_generated}")
             trade_closed = True
+        elif current_time_str >= "15:20":
+            pnl_generated = (s["entry_price"] - latest_price) * lot_size
+            send_telegram_message(f"🌇 {display_name} DAY END SQUARE OFF (Carry Forward Nahi)\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
+            trade_closed = True
 
     if trade_closed:
         s["daily_trades"].append({'date': today_str, 'pnl': pnl_generated})
         s["current_trade"] = None
+        s["atm_strike"] = None
+        s["targets"] = None
         send_telegram_message(calculate_reports(symbol_key))
 
-    if s["current_trade"] is None:
+    # Market open zalyavar pahili 5 minitं khup volatile astat, tyamule navin trade
+    # fakt 09:20 nantarach ghyaycha (existing open trade var kahich parinam nahi)
+    if s["current_trade"] is None and current_time_str >= "09:20":
         if prev_dir == -1 and curr_dir == 1 and buy_confirmed:
             s["current_trade"] = 'BUY'
             s["entry_price"] = latest_price
             s["stop_loss"] = latest_price - 15
             strikes = get_option_strikes(latest_price, 'BUY', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'BUY')
+            premium_moves = get_estimated_premium_moves(latest_price, s["stop_loss"], targets)
+            s["atm_strike"] = strikes['ATM']
+            s["targets"] = targets
+
+            atm_strike_num = round(latest_price / strike_step) * strike_step
+            real_premium = try_get_real_premium(symbol_key, atm_strike_num, 'CE')
+            if real_premium is not None:
+                premium_line = f"💰 **Live Premium: ₹{real_premium}** (Angel One वरून)\n\n"
+            else:
+                premium_line = (
+                    f"📊 अंदाजे Premium Movement (ATM, Delta~0.5):\n"
+                    f"SL लागल्यास: सुमारे -{premium_moves['SL']} पॉइंट्स\n"
+                    f"T1 ला: सुमारे +{premium_moves['T1']} पॉइंट्स\n"
+                    f"T2 ला: सुमारे +{premium_moves['T2']} पॉइंट्स\n"
+                    f"T3 ला: सुमारे +{premium_moves['T3']} पॉइंट्स\n"
+                    f"⚠️ हा फक्त अंदाज आहे (live data उपलब्ध नाही), actual प्रीमियम वेगळा असू शकतो\n\n"
+                )
+
             send_telegram_message(
                 f"🟢 **{display_name} BUY CALL SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
                 f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend)\n\n"
-                f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
+                f"🎯 Targets (Spot):\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
+                f"{premium_line}"
                 f"📌 इतर Strike Options:\n"
                 f"ITM: {strikes['ITM']}\n"
                 f"OTM: {strikes['OTM']}"
@@ -381,12 +472,31 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             s["stop_loss"] = latest_price + 15
             strikes = get_option_strikes(latest_price, 'SELL', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'SELL')
+            premium_moves = get_estimated_premium_moves(latest_price, s["stop_loss"], targets)
+            s["atm_strike"] = strikes['ATM']
+            s["targets"] = targets
+
+            atm_strike_num = round(latest_price / strike_step) * strike_step
+            real_premium = try_get_real_premium(symbol_key, atm_strike_num, 'PE')
+            if real_premium is not None:
+                premium_line = f"💰 **Live Premium: ₹{real_premium}** (Angel One वरून)\n\n"
+            else:
+                premium_line = (
+                    f"📊 अंदाजे Premium Movement (ATM, Delta~0.5):\n"
+                    f"SL लागल्यास: सुमारे -{premium_moves['SL']} पॉइंट्स\n"
+                    f"T1 ला: सुमारे +{premium_moves['T1']} पॉइंट्स\n"
+                    f"T2 ला: सुमारे +{premium_moves['T2']} पॉइंट्स\n"
+                    f"T3 ला: सुमारे +{premium_moves['T3']} पॉइंट्स\n"
+                    f"⚠️ हा फक्त अंदाज आहे (live data उपलब्ध नाही), actual प्रीमियम वेगळा असू शकतो\n\n"
+                )
+
             send_telegram_message(
                 f"🔴 **{display_name} BUY PUT SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
                 f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend)\n\n"
-                f"🎯 Targets:\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
+                f"🎯 Targets (Spot):\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
+                f"{premium_line}"
                 f"📌 इतर Strike Options:\n"
                 f"ITM: {strikes['ITM']}\n"
                 f"OTM: {strikes['OTM']}"
