@@ -7,4 +7,5 @@ requests
 matplotlib
 flask
 pandas-ta
-mplfinance
+mplfismartapi-python
+pyotpnance
