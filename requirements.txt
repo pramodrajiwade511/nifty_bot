@@ -10,4 +10,4 @@ pandas-ta
 mplfinance
 smartapi-python
 pyotp
-
+logzero
