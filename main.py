@@ -556,7 +556,8 @@ def test_broker():
         if session:
             msg = "✅ Angel One session यशस्वी झाले! Connection working ahe."
         else:
-            msg = "❌ Angel One session fail zala. Credentials (API_KEY/CLIENT_CODE/PASSWORD/TOTP_SECRET) check kara."
+            detail = broker.get_last_error() or "unknown error"
+            msg = f"❌ Angel One session fail zala.\nकारण: {detail}"
         send_telegram_message(msg)
         return msg, 200
     except Exception as e:
