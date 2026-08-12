@@ -49,6 +49,9 @@ state = {
         "last_vwap": None,
         "atm_strike": None,
         "targets": None,
+        "base_premium": None,
+        "entry_spot": None,
+        "option_type": None,
     }
     for sym in SYMBOLS
 }
@@ -56,6 +59,29 @@ state = {
 last_gm_date = ""
 last_error_msg = None
 last_error_date = ""
+
+DAILY_PROFIT_TARGET = 1000  # Rupees - ha target zala ki tya divsa navin trade nahi
+DAILY_LOSS_LIMIT = 1000     # Rupees - itka tota zala ki tya divsa navin trade nahi (capital protect karण्yasathi)
+last_target_hit_date = ""
+last_loss_limit_hit_date = ""
+
+
+def get_today_total_pnl(today_str):
+    """Donhi symbols (Nifty+BankNifty) cha aajcha combined realized P&L kadhto."""
+    total = 0
+    for sym in SYMBOLS:
+        total += sum(t['pnl'] for t in state[sym]["daily_trades"] if t['date'] == today_str)
+    return total
+
+
+def daily_limit_reached(today_str):
+    """
+    Aajcha profit target (+₹1000) किंवा loss limit (-₹1000) touch झाला असेल tar
+    True return karto - tyavelela navin trade ghyaycha nahi (existing open trade
+    matra normally manage hot rahil, fakt navin entry band).
+    """
+    total_pnl = get_today_total_pnl(today_str)
+    return total_pnl >= DAILY_PROFIT_TARGET or total_pnl <= -DAILY_LOSS_LIMIT
 
 
 def send_telegram_message(message):
@@ -363,23 +389,20 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     s["last_rsi"] = round(latest_rsi, 1) if not pd.isna(latest_rsi) else None
     s["last_vwap"] = None  # ata vaparat nahi, EMA vaparto
 
-    # Trade active असताना pratyek check la professional style update pathavto
-    if s["current_trade"] is not None and s["targets"]:
-        t = s["targets"]
-        if s["current_trade"] == 'BUY':
-            t1_hit = "✅" if latest_price >= t['T1'] else "⏳"
-            t2_hit = "✅" if latest_price >= t['T2'] else "⏳"
-            t3_hit = "✅" if latest_price >= t['T3'] else "⏳"
+    # Trade active असताना pratyek check la simple tick pathavto (channel style सारखं)
+    if s["current_trade"] is not None and s["base_premium"] is not None:
+        # Live premium suruvatila (entry la) milala hota, tyavaroon ATM delta
+        # vaparun sध्याचा estimated premium kadhto ani fakt tोच number pathavto.
+        spot_move = latest_price - s["entry_spot"]
+        if s["option_type"] == 'CE':
+            premium_change = spot_move * ATM_DELTA_ESTIMATE
         else:
-            t1_hit = "✅" if latest_price <= t['T1'] else "⏳"
-            t2_hit = "✅" if latest_price <= t['T2'] else "⏳"
-            t3_hit = "✅" if latest_price <= t['T3'] else "⏳"
-
-        send_telegram_message(
-            f"📍 {display_name} {s['atm_strike']}\n"
-            f"Spot: {latest_price} | SL: {s['stop_loss']}\n"
-            f"T1: {t['T1']} {t1_hit} | T2: {t['T2']} {t2_hit} | T3: {t['T3']} {t3_hit}"
-        )
+            premium_change = -spot_move * ATM_DELTA_ESTIMATE
+        current_premium = round(s["base_premium"] + premium_change, 1)
+        send_telegram_message(f"{current_premium}")
+    elif s["current_trade"] is not None:
+        # Entry veli live premium milala navhta, tyamule honestly spot dakhavतो
+        send_telegram_message(f"{display_name}: {latest_price}")
 
     trade_closed = False
     pnl_generated = 0
@@ -423,6 +446,9 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         s["current_trade"] = None
         s["atm_strike"] = None
         s["targets"] = None
+        s["base_premium"] = None
+        s["entry_spot"] = None
+        s["option_type"] = None
         send_telegram_message(calculate_reports(symbol_key))
 
     # Market open zalyavar pahili 5 minitं khup volatile astat, tyamule navin trade
@@ -440,6 +466,9 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
 
             atm_strike_num = round(latest_price / strike_step) * strike_step
             real_premium = try_get_real_premium(symbol_key, atm_strike_num, 'CE')
+            s["entry_spot"] = latest_price
+            s["option_type"] = 'CE'
+            s["base_premium"] = real_premium  # None asel tar estimate न देता spot ticks dakhavtो
             if real_premium is not None:
                 premium_line = f"💰 **Live Premium: ₹{real_premium}** (Angel One वरून)\n\n"
             else:
@@ -478,6 +507,9 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
 
             atm_strike_num = round(latest_price / strike_step) * strike_step
             real_premium = try_get_real_premium(symbol_key, atm_strike_num, 'PE')
+            s["entry_spot"] = latest_price
+            s["option_type"] = 'PE'
+            s["base_premium"] = real_premium
             if real_premium is not None:
                 premium_line = f"💰 **Live Premium: ₹{real_premium}** (Angel One वरून)\n\n"
             else:
@@ -562,6 +594,27 @@ def test_broker():
         return msg, 200
     except Exception as e:
         err_msg = f"❌ Broker test error: {e}"
+        send_telegram_message(err_msg)
+        return err_msg, 200
+
+
+@app.route('/run-backtest')
+def run_backtest_route():
+    """
+    Shell shivayही browser madhun backtest run karण्यasathi. Result Telegram
+    var pathavla jato (magche 60 divasach - yfinance cha limit ahe).
+    Data download + calculation la thoda vel (30-60 sec) lagू shakto.
+    """
+    try:
+        import backtest as bt
+        send_telegram_message("⏳ Backtest suru zala, thoda vel lagel (data download + calculation)...")
+        for symbol_key in bt.SYMBOLS:
+            trades = bt.run_backtest(symbol_key)
+            report = bt.format_report(symbol_key, trades)
+            send_telegram_message(report)
+        return "Backtest complete, results pathavले Telegram var.", 200
+    except Exception as e:
+        err_msg = f"❌ Backtest error: {e}"
         send_telegram_message(err_msg)
         return err_msg, 200
 
