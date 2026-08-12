@@ -1,4 +1,3 @@
-"Added broker.py"
 """
 ANGEL ONE SMARTAPI INTEGRATION (DRY-RUN SAFE)
 ===============================================
@@ -40,6 +39,12 @@ SCRIP_MASTER_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files
 
 _smart_api_session = None
 _scrip_master_cache = None
+_last_error = None
+
+
+def get_last_error():
+    """Shevatcha error kay hota te bagण्यasathi - main.py Telegram var pathavण्yasathi vaparel."""
+    return _last_error
 
 
 def get_smart_api_session():
@@ -47,12 +52,13 @@ def get_smart_api_session():
     Angel One SmartAPI shi login karto. Session cache karto jenekarun
     prattyek order sathi navin login karava lagnar nahi.
     """
-    global _smart_api_session
+    global _smart_api_session, _last_error
     if _smart_api_session is not None:
         return _smart_api_session
 
     if not all([API_KEY, CLIENT_CODE, PASSWORD, TOTP_SECRET]):
-        print("Angel One credentials Environment Variables madhe sapadle nahit.")
+        _last_error = "Credentials Environment Variables madhe sapadle nahit (API_KEY/CLIENT_CODE/PASSWORD/TOTP_SECRET pैki kahi missing ahet)."
+        print(f"Angel One error: {_last_error}")
         return None
 
     try:
@@ -63,14 +69,16 @@ def get_smart_api_session():
         session_data = obj.generateSession(CLIENT_CODE, PASSWORD, totp)
 
         if not session_data.get("status"):
-            print(f"Angel One login fail zala: {session_data}")
+            _last_error = str(session_data)
+            print(f"Angel One login fail zala: {_last_error}")
             return None
 
         _smart_api_session = obj
         print("Angel One session yashasvi zaale.")
         return obj
     except Exception as e:
-        print(f"Angel One session error: {e}")
+        _last_error = str(e)
+        print(f"Angel One session error: {_last_error}")
         return None
 
 
