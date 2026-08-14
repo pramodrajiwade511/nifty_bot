@@ -48,6 +48,7 @@ state = {
         "last_rsi": None,
         "last_vwap": None,
         "atm_strike": None,
+        "trade_date": None,
         "targets": None,
         "base_premium": None,
         "entry_spot": None,
@@ -57,6 +58,7 @@ state = {
 }
 
 last_gm_date = ""
+last_daily_summary_date = ""
 last_error_msg = None
 last_error_date = ""
 
@@ -290,23 +292,48 @@ def get_levels(ticker):
     return None, None, None
 
 
+BROKERAGE_PER_ORDER = 20  # ₹20 prati order (ANDAJ - Angel One cha actual F&O brokerage
+                           # check kara, discount brokers sathi साधारण ₹20 flat असते,
+                           # pan plan/scheme nusar badalू शकते)
+
+
 def calculate_reports(symbol_key):
     daily_trades = state[symbol_key]["daily_trades"]
     display_name = SYMBOLS[symbol_key]["display"]
     if not daily_trades:
         return f"📊 {display_name}: अजून कोणताही ट्रेड पूर्ण झाला नाही."
     today_str = datetime.now(IST).strftime('%Y-%m-%d')
-    today_pnl = sum(t['pnl'] for t in daily_trades if t['date'] == today_str)
-    total_pnl = sum(t['pnl'] for t in daily_trades)
+    today_trades = [t for t in daily_trades if t['date'] == today_str]
+
+    lines = [f"📊 **{display_name} PERFORMANCE REPORT** 📊\n"]
+    lines.append("📋 आजचे ट्रेड्स:")
+    today_gross = 0
+    today_brokerage = 0
+    for t in today_trades:
+        gross = t['pnl']
+        brokerage = BROKERAGE_PER_ORDER * 2  # entry + exit = 2 orders
+        net = gross - brokerage
+        today_gross += gross
+        today_brokerage += brokerage
+        strike_text = t.get('strike') or '-'
+        lines.append(
+            f"• {t['type']} {strike_text} | Entry: {t['entry']} → Exit: {t['exit']}\n"
+            f"  Gross P&L: ₹{round(gross,2)} | Brokerage(अंदाजे): ₹{brokerage} | Net: ₹{round(net,2)}"
+        )
+
     total_trades = len(daily_trades)
+    total_pnl = sum(t['pnl'] for t in daily_trades)
     weekly_avg = total_pnl / total_trades if total_trades > 0 else 0
 
-    return (
-        f"📊 **{display_name} PERFORMANCE REPORT** 📊\n\n"
-        f"🗓️ आजचा नफा/तोटा: ₹{round(today_pnl, 2)}\n"
-        f"📈 एकूण झालेले ट्रेड्स: {total_trades}\n"
-        f"📉 चालू आठवड्याचा सरासरी नफा: ₹{round(weekly_avg, 2)}"
-    )
+    lines.append(f"\n🗓️ आजचा एकूण Gross नफा/तोटा: ₹{round(today_gross, 2)}")
+    lines.append(f"💸 आजचं अंदाजे एकूण Brokerage: ₹{today_brokerage}")
+    lines.append(f"✅ आजचा Net नफा/तोटा: ₹{round(today_gross - today_brokerage, 2)}")
+    lines.append(f"\n📈 (bot suru zalyapasunche) एकूण ट्रेड्स: {total_trades}")
+    lines.append(f"📉 सरासरी नफा प्रति ट्रेड (gross): ₹{round(weekly_avg, 2)}")
+    lines.append(f"\n⚠️ Brokerage हे fakt अंदाजित आहे (₹20/order gृhit dharlay) — actual आकडा तुमच्या Angel One च्या contract note मध्ये चेक करा.")
+    lines.append("⚠️ ही आकडेवारी फक्त bot शेवटचा restart झाल्यापासूनची आहे (persistent storage नाही, त्यामुळे खरी 'monthly' history यात नाही).")
+
+    return "\n".join(lines)
 
 
 def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
@@ -406,6 +433,32 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
 
     trade_closed = False
     pnl_generated = 0
+    exit_price_recorded = latest_price
+
+    # SAFETY NET: jar konतahi karanamule (cron delay, market close overnight, etc.)
+    # aajच्या aadhicha trade ajunही "open" rahila asel, tar to lagech force-close
+    # karto - carry-forward kadhीच hou dyaycha nahi.
+    if s["current_trade"] is not None and s["trade_date"] is not None and s["trade_date"] != today_str:
+        if s["current_trade"] == 'BUY':
+            pnl_generated = (latest_price - s["entry_price"]) * lot_size
+        else:
+            pnl_generated = (s["entry_price"] - latest_price) * lot_size
+        send_telegram_message(
+            f"🚨 {display_name} SAFETY SQUARE-OFF! (जुना ट्रेड carry-forward झाला होता, "
+            f"आता force-close केला)\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}"
+        )
+        s["daily_trades"].append({
+            'date': s["trade_date"], 'type': s["current_trade"], 'strike': s["atm_strike"],
+            'entry': s["entry_price"], 'exit': latest_price, 'pnl': pnl_generated,
+        })
+        s["current_trade"] = None
+        s["atm_strike"] = None
+        s["targets"] = None
+        s["base_premium"] = None
+        s["entry_spot"] = None
+        s["option_type"] = None
+        s["trade_date"] = None
+        return
 
     if s["current_trade"] == 'BUY':
         new_sl = latest_price - 10
@@ -414,6 +467,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             send_telegram_message(f"🔁 {display_name} Stop Loss ट्रेल झाला! नवीन SL: {s['stop_loss']}")
         if latest_price <= s["stop_loss"]:
             pnl_generated = (latest_price - s["entry_price"]) * lot_size
+            exit_price_recorded = latest_price
             send_telegram_message(f"🔴 {display_name} BUY EXIT! SL Hit\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
             chart_path = generate_signal_chart(df, 'BUY_EXIT', latest_price, s["stop_loss"], symbol_key)
             if chart_path:
@@ -421,6 +475,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             trade_closed = True
         elif current_time_str >= "15:20":
             pnl_generated = (latest_price - s["entry_price"]) * lot_size
+            exit_price_recorded = latest_price
             send_telegram_message(f"🌇 {display_name} DAY END SQUARE OFF (Carry Forward Nahi)\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
             trade_closed = True
 
@@ -431,6 +486,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             send_telegram_message(f"🔁 {display_name} Stop Loss ट्रेल झाला! नवीन SL: {s['stop_loss']}")
         if latest_price >= s["stop_loss"]:
             pnl_generated = (s["entry_price"] - latest_price) * lot_size
+            exit_price_recorded = latest_price
             send_telegram_message(f"🔴 {display_name} SELL EXIT! SL Hit\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
             chart_path = generate_signal_chart(df, 'SELL_EXIT', latest_price, s["stop_loss"], symbol_key)
             if chart_path:
@@ -438,26 +494,38 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             trade_closed = True
         elif current_time_str >= "15:20":
             pnl_generated = (s["entry_price"] - latest_price) * lot_size
+            exit_price_recorded = latest_price
             send_telegram_message(f"🌇 {display_name} DAY END SQUARE OFF (Carry Forward Nahi)\nExit Price: {latest_price}\nP&L: ₹{pnl_generated}")
             trade_closed = True
 
     if trade_closed:
-        s["daily_trades"].append({'date': today_str, 'pnl': pnl_generated})
+        s["daily_trades"].append({
+            'date': today_str,
+            'type': s["current_trade"],
+            'strike': s["atm_strike"],
+            'entry': s["entry_price"],
+            'exit': exit_price_recorded,
+            'pnl': pnl_generated,
+        })
         s["current_trade"] = None
         s["atm_strike"] = None
         s["targets"] = None
         s["base_premium"] = None
         s["entry_spot"] = None
         s["option_type"] = None
+        s["trade_date"] = None
         send_telegram_message(calculate_reports(symbol_key))
 
     # Market open zalyavar pahili 5 minitं khup volatile astat, tyamule navin trade
-    # fakt 09:20 nantarach ghyaycha (existing open trade var kahich parinam nahi)
-    if s["current_trade"] is None and current_time_str >= "09:20":
+    # fakt 09:20 nantarach ghyaycha. AANI 15:15 nantar navin trade ghyaycha NAHI -
+    # (aadhi hya condition la vartchi limit navhती, tyamule 3:33 sarkhya veli navin
+    # trade ughadla jayacha ani carry-forward houn motha risk yayacha - ha fix tyasathich)
+    if s["current_trade"] is None and current_time_str >= "09:17" and current_time_str < "15:15":
         if prev_dir == -1 and curr_dir == 1 and buy_confirmed:
             s["current_trade"] = 'BUY'
             s["entry_price"] = latest_price
             s["stop_loss"] = latest_price - 15
+            s["trade_date"] = today_str
             strikes = get_option_strikes(latest_price, 'BUY', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'BUY')
             premium_moves = get_estimated_premium_moves(latest_price, s["stop_loss"], targets)
@@ -499,6 +567,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             s["current_trade"] = 'SELL'
             s["entry_price"] = latest_price
             s["stop_loss"] = latest_price + 15
+            s["trade_date"] = today_str
             strikes = get_option_strikes(latest_price, 'SELL', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'SELL')
             premium_moves = get_estimated_premium_moves(latest_price, s["stop_loss"], targets)
@@ -539,7 +608,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
 
 
 def check_signals():
-    global last_gm_date, last_error_msg, last_error_date
+    global last_gm_date, last_error_msg, last_error_date, last_daily_summary_date
     now = datetime.now(IST)
     today_str = now.strftime('%Y-%m-%d')
     current_time_str = now.strftime('%H:%M')
@@ -562,6 +631,17 @@ def check_signals():
             if last_error_msg != err_text or last_error_date != today_str:
                 send_telegram_message(f"⚠️ Bot Error ({symbol_key}): {e}")
                 last_error_msg, last_error_date = err_text, today_str
+
+    # 3:30 nantar (sagle square-off zalyavar) ekach vela combined daily summary pathavto
+    if current_time_str >= "15:30" and last_daily_summary_date != today_str:
+        total_pnl = get_today_total_pnl(today_str)
+        summary_lines = [f"🔔 **DAY END SUMMARY** ({today_str})\n"]
+        for symbol_key in SYMBOLS:
+            summary_lines.append(calculate_reports(symbol_key))
+            summary_lines.append("")
+        summary_lines.append(f"💰 **एकूण आजचा नफा/तोटा (दोन्ही मिळून): ₹{round(total_pnl, 2)}**")
+        send_telegram_message("\n".join(summary_lines))
+        last_daily_summary_date = today_str
 
 
 @app.route('/')
