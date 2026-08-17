@@ -376,7 +376,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             last_error_msg, last_error_date = err, today_str
         return
 
-    st = ta.supertrend(df['High'], df['Low'], df['Close'], length=10, multiplier=2)
+    st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=1.5)
     st_col, dir_col = get_supertrend_columns(st)
     if st_col is None or dir_col is None:
         err = f"{display_name}: Supertrend column sapadla nahi. Available: {st.columns.tolist()}"
@@ -389,12 +389,12 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     df['ST'] = st[st_col]
     df['ST_DIR'] = st[dir_col]
 
-    # --- Confirmation indicators: RSI + EMA(9,21) ---
+    # --- Confirmation indicators: RSI + EMA(5,13) - fast setting, signal lag kami karnyasathi ---
     # VWAP kadhla - Index (Nifty/BankNifty) sathi Yahoo Finance volume denat nahi,
     # tyamule VWAP kayam NaN yet hota ani confirmation kadhich pass hot navhta.
     df['RSI'] = ta.rsi(df['Close'], length=14)
-    df['EMA9'] = ta.ema(df['Close'], length=9)
-    df['EMA21'] = ta.ema(df['Close'], length=21)
+    df['EMA9'] = ta.ema(df['Close'], length=5)
+    df['EMA21'] = ta.ema(df['Close'], length=13)
 
     latest_price = round(df['Close'].iloc[-1], 2)
     prev_dir = df['ST_DIR'].iloc[-2]
