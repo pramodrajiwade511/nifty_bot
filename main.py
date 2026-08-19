@@ -46,6 +46,10 @@ state = {
         "last_status_dir": None,
         "last_status_time": None,
         "last_rsi": None,
+        "last_adx": None,
+        "or_high": None,
+        "or_low": None,
+        "or_date": "",
         "last_vwap": None,
         "atm_strike": None,
         "trade_date": None,
@@ -61,6 +65,9 @@ last_gm_date = ""
 last_daily_summary_date = ""
 last_error_msg = None
 last_error_date = ""
+
+STRATEGY_MODE = "ORB"  # "TREND" = SuperTrend+RSI+EMA+ADX (BUY+SELL donhi)
+                        # "ORB" = Opening Range Breakout (fakt BUY, pahilya candle cha high todla tar)
 
 DAILY_PROFIT_TARGET = 1000  # Rupees - ha target zala ki tya divsa navin trade nahi
 DAILY_LOSS_LIMIT = 1000     # Rupees - itka tota zala ki tya divsa navin trade nahi (capital protect karण्yasathi)
@@ -376,7 +383,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             last_error_msg, last_error_date = err, today_str
         return
 
-    st = ta.supertrend(df['High'], df['Low'], df['Close'], length=7, multiplier=1.5)
+    st = ta.supertrend(df['High'], df['Low'], df['Close'], length=10, multiplier=2.5)
     st_col, dir_col = get_supertrend_columns(st)
     if st_col is None or dir_col is None:
         err = f"{display_name}: Supertrend column sapadla nahi. Available: {st.columns.tolist()}"
@@ -389,12 +396,16 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     df['ST'] = st[st_col]
     df['ST_DIR'] = st[dir_col]
 
-    # --- Confirmation indicators: RSI + EMA(5,13) - fast setting, signal lag kami karnyasathi ---
+    # --- Confirmation indicators: RSI + EMA(9,21) + ADX (trend strength filter) ---
     # VWAP kadhla - Index (Nifty/BankNifty) sathi Yahoo Finance volume denat nahi,
     # tyamule VWAP kayam NaN yet hota ani confirmation kadhich pass hot navhta.
     df['RSI'] = ta.rsi(df['Close'], length=14)
-    df['EMA9'] = ta.ema(df['Close'], length=5)
-    df['EMA21'] = ta.ema(df['Close'], length=13)
+    df['EMA9'] = ta.ema(df['Close'], length=9)
+    df['EMA21'] = ta.ema(df['Close'], length=21)
+
+    adx_df = ta.adx(df['High'], df['Low'], df['Close'], length=14)
+    adx_col = next((c for c in adx_df.columns if c.startswith('ADX_')), None)
+    df['ADX'] = adx_df[adx_col] if adx_col else None
 
     latest_price = round(df['Close'].iloc[-1], 2)
     prev_dir = df['ST_DIR'].iloc[-2]
@@ -403,17 +414,51 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     latest_rsi = df['RSI'].iloc[-1]
     latest_ema9 = df['EMA9'].iloc[-1]
     latest_ema21 = df['EMA21'].iloc[-1]
+    latest_adx = df['ADX'].iloc[-1] if df['ADX'] is not None else None
+    strong_trend = (latest_adx is not None) and (not pd.isna(latest_adx)) and latest_adx > 20
 
-    # BUY confirm: RSI bullish zone, fast EMA slow EMA peksha var (short-term uptrend)
-    buy_confirmed = latest_rsi > 50 and latest_ema9 > latest_ema21
+    # BUY confirm: RSI bullish zone, fast EMA slow EMA peksha var, ani trend मजबूत asel tarच
+    buy_confirmed = latest_rsi > 50 and latest_ema9 > latest_ema21 and strong_trend
     # SELL confirm: ulta
-    sell_confirmed = latest_rsi < 50 and latest_ema9 < latest_ema21
+    sell_confirmed = latest_rsi < 50 and latest_ema9 < latest_ema21 and strong_trend
+
+    # --- ORB (Opening Range Breakout) sathi: divsachi pahili 5-min candle cha High/Low mark karto ---
+    if s["or_date"] != today_str:
+        day_candles = df[df.index.strftime('%Y-%m-%d') == today_str]
+        first_candle_candles = day_candles[day_candles.index.strftime('%H:%M') == '09:15']
+        if not first_candle_candles.empty:
+            s["or_high"] = round(first_candle_candles['High'].iloc[0], 2)
+            s["or_low"] = round(first_candle_candles['Low'].iloc[0], 2)
+            s["or_date"] = today_str
+            send_telegram_message(
+                f"🔔 {display_name} Opening Range Set!\n"
+                f"High: {s['or_high']} | Low: {s['or_low']}\n"
+                f"(High च्या वर price गेली तर BUY सिग्नल येईल)"
+            )
+
+    ORB_BREAKOUT_BUFFER = 5  # High/Low pasun itke points jasta gele tarach signal - fake breakouts kami karnyasathi
+
+    orb_buy_confirmed = (
+        STRATEGY_MODE == "ORB"
+        and s["or_high"] is not None
+        and latest_price > (s["or_high"] + ORB_BREAKOUT_BUFFER)
+        and latest_rsi > 50
+        and strong_trend
+    )
+    orb_sell_confirmed = (
+        STRATEGY_MODE == "ORB"
+        and s["or_low"] is not None
+        and latest_price < (s["or_low"] - ORB_BREAKOUT_BUFFER)
+        and latest_rsi < 50
+        and strong_trend
+    )
 
     # /status command sathi latest values save karto
     s["last_status_price"] = latest_price
     s["last_status_dir"] = curr_dir
     s["last_status_time"] = now.strftime('%H:%M:%S')
     s["last_rsi"] = round(latest_rsi, 1) if not pd.isna(latest_rsi) else None
+    s["last_adx"] = round(latest_adx, 1) if latest_adx is not None and not pd.isna(latest_adx) else None
     s["last_vwap"] = None  # ata vaparat nahi, EMA vaparto
 
     # Trade active असताना pratyek check la simple tick pathavto (channel style सारखं)
@@ -521,10 +566,11 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     # (aadhi hya condition la vartchi limit navhती, tyamule 3:33 sarkhya veli navin
     # trade ughadla jayacha ani carry-forward houn motha risk yayacha - ha fix tyasathich)
     if s["current_trade"] is None and current_time_str >= "09:17" and current_time_str < "15:15":
-        if prev_dir == -1 and curr_dir == 1 and buy_confirmed:
+        entry_condition = orb_buy_confirmed if STRATEGY_MODE == "ORB" else (prev_dir == -1 and curr_dir == 1 and buy_confirmed)
+        if entry_condition:
             s["current_trade"] = 'BUY'
             s["entry_price"] = latest_price
-            s["stop_loss"] = latest_price - 15
+            s["stop_loss"] = s["or_low"] if (STRATEGY_MODE == "ORB" and s["or_low"]) else latest_price - 15
             s["trade_date"] = today_str
             strikes = get_option_strikes(latest_price, 'BUY', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'BUY')
@@ -549,11 +595,16 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                     f"⚠️ हा फक्त अंदाज आहे (live data उपलब्ध नाही), actual प्रीमियम वेगळा असू शकतो\n\n"
                 )
 
+            confirmation_text = (
+                f"✅ Confirmation: ORB Breakout (High: {s['or_high']}) | RSI {round(latest_rsi,1)}\n\n"
+                if STRATEGY_MODE == "ORB" else
+                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
+            )
             send_telegram_message(
                 f"🟢 **{display_name} BUY CALL SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
-                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend)\n\n"
+                f"{confirmation_text}"
                 f"🎯 Targets (Spot):\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
                 f"{premium_line}"
                 f"📌 इतर Strike Options:\n"
@@ -563,10 +614,13 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             chart_path = generate_signal_chart(df, 'BUY', latest_price, s["stop_loss"], symbol_key)
             if chart_path:
                 send_telegram_chart(chart_path, f"{display_name} BUY CALL | Entry: {latest_price} | SL: {s['stop_loss']} | ATM: {strikes['ATM']}")
-        elif prev_dir == 1 and curr_dir == -1 and sell_confirmed:
+        elif (
+            (STRATEGY_MODE == "TREND" and prev_dir == 1 and curr_dir == -1 and sell_confirmed)
+            or (STRATEGY_MODE == "ORB" and orb_sell_confirmed)
+        ):
             s["current_trade"] = 'SELL'
             s["entry_price"] = latest_price
-            s["stop_loss"] = latest_price + 15
+            s["stop_loss"] = s["or_high"] if (STRATEGY_MODE == "ORB" and s["or_high"]) else latest_price + 15
             s["trade_date"] = today_str
             strikes = get_option_strikes(latest_price, 'SELL', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'SELL')
@@ -591,11 +645,16 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                     f"⚠️ हा फक्त अंदाज आहे (live data उपलब्ध नाही), actual प्रीमियम वेगळा असू शकतो\n\n"
                 )
 
+            sell_confirmation_text = (
+                f"✅ Confirmation: ORB Breakdown (Low: {s['or_low']}) | RSI {round(latest_rsi,1)}\n\n"
+                if STRATEGY_MODE == "ORB" else
+                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
+            )
             send_telegram_message(
                 f"🔴 **{display_name} BUY PUT SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
                 f"Entry Price: {latest_price}\nInitial SL: {s['stop_loss']}\n\n"
-                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend)\n\n"
+                f"{sell_confirmation_text}"
                 f"🎯 Targets (Spot):\nT1: {targets['T1']}\nT2: {targets['T2']}\nT3: {targets['T3']}\n\n"
                 f"{premium_line}"
                 f"📌 इतर Strike Options:\n"
@@ -746,7 +805,7 @@ def telegram_webhook():
                     f"💹 शेवटची किंमत: {s['last_status_price'] or 'N/A'}\n"
                     f"📈 सध्याचा ट्रेंड: {dir_text}\n"
                     f"📌 सध्याचा ट्रेड: {trade_text}\n"
-                    f"📐 RSI: {s['last_rsi'] or 'N/A'}"
+                    f"📐 RSI: {s['last_rsi'] or 'N/A'} | ADX: {s['last_adx'] or 'N/A'}"
                 )
             if last_error_msg:
                 lines.append(f"\n⚠️ शेवटची एरर: {last_error_msg}")
