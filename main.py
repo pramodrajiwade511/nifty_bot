@@ -105,8 +105,9 @@ last_daily_summary_date = ""
 last_error_msg = None
 last_error_date = ""
 
-STRATEGY_MODE = "ORB"  # "TREND" = SuperTrend+RSI+EMA+ADX (BUY+SELL donhi)
-                        # "ORB" = Opening Range Breakout (fakt BUY, pahilya candle cha high todla tar)
+STRATEGY_MODE = "COMBINED"  # "TREND" = SuperTrend+RSI+EMA+ADX (BUY+SELL donhi)
+                        # "ORB" = Opening Range Breakout (fakt price OR High/Low todla tar)
+                        # "COMBINED" = SuperTrend flip + EMA + RSI + ADX + ORB level break - sagळे ekatra
 
 MAX_INITIAL_SL_POINTS = 20  # ORB madhe Opening Range khup wide asel tar risk itka jasta nasava
                               # - ha maximum cap, actual SL (OR low/high) yापेksha jawal asel tar tोच vaparला jaईl
@@ -505,6 +506,34 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         and strong_trend
     )
 
+    # --- Double-Candle Confirmation: mागची candle पण tयाच dishela confirm karते ka -
+    # ekach candle chya tatpurत्या spike var signal yeऊ naye, false signals kami karnyasathi ---
+    prev_rsi = df['RSI'].iloc[-2]
+    prev_ema9 = df['EMA9'].iloc[-2]
+    prev_ema21 = df['EMA21'].iloc[-2]
+    double_candle_bullish = (not pd.isna(prev_rsi)) and prev_rsi > 50 and prev_ema9 > prev_ema21
+    double_candle_bearish = (not pd.isna(prev_rsi)) and prev_rsi < 50 and prev_ema9 < prev_ema21
+
+    # --- COMBINED strategy: SuperTrend flip + EMA + RSI + ADX + ORB level break + Double-Candle, sagळे ekatra ---
+    combined_buy_confirmed = (
+        STRATEGY_MODE == "COMBINED"
+        and prev_dir == -1 and curr_dir == 1  # SuperTrend flip
+        and latest_ema9 > latest_ema21  # EMA confirmation
+        and latest_rsi > 50  # RSI momentum
+        and strong_trend  # ADX filter
+        and s["or_high"] is not None and latest_price > s["or_high"]  # ORB level break
+        and double_candle_bullish  # mागchi candle pan bullish होती (fake spike nahi)
+    )
+    combined_sell_confirmed = (
+        STRATEGY_MODE == "COMBINED"
+        and prev_dir == 1 and curr_dir == -1  # SuperTrend flip
+        and latest_ema9 < latest_ema21  # EMA confirmation
+        and latest_rsi < 50  # RSI momentum
+        and strong_trend  # ADX filter
+        and s["or_low"] is not None and latest_price < s["or_low"]  # ORB level break
+        and double_candle_bearish  # mागchi candle pan bearish होती (fake spike nahi)
+    )
+
     # /status command sathi latest values save karto
     s["last_status_price"] = latest_price
     s["last_status_dir"] = curr_dir
@@ -622,7 +651,12 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         and current_time_str >= "09:17" and current_time_str < "15:15"
         and lot_size > 0  # lot_size verify न झालेला (0) asel tar (MCX commodities) trade skip
     ):
-        entry_condition = orb_buy_confirmed if STRATEGY_MODE == "ORB" else (prev_dir == -1 and curr_dir == 1 and buy_confirmed)
+        if STRATEGY_MODE == "ORB":
+            entry_condition = orb_buy_confirmed
+        elif STRATEGY_MODE == "COMBINED":
+            entry_condition = combined_buy_confirmed
+        else:
+            entry_condition = prev_dir == -1 and curr_dir == 1 and buy_confirmed
         if entry_condition:
             s["current_trade"] = 'BUY'
             s["entry_price"] = latest_price
@@ -651,11 +685,15 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                     f"⚠️ हा फक्त अंदाज आहे (live data उपलब्ध नाही), actual प्रीमियम वेगळा असू शकतो\n\n"
                 )
 
-            confirmation_text = (
-                f"✅ Confirmation: ORB Breakout (High: {s['or_high']}) | RSI {round(latest_rsi,1)}\n\n"
-                if STRATEGY_MODE == "ORB" else
-                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
-            )
+            if STRATEGY_MODE == "ORB":
+                confirmation_text = f"✅ Confirmation: ORB Breakout (High: {s['or_high']}) | RSI {round(latest_rsi,1)}\n\n"
+            elif STRATEGY_MODE == "COMBINED":
+                confirmation_text = (
+                    f"✅ Confirmation: SuperTrend Flip | EMA9>EMA21 | RSI {round(latest_rsi,1)} | "
+                    f"ADX {round(latest_adx,1)} (Strong) | Price > OR High ({s['or_high']})\n\n"
+                )
+            else:
+                confirmation_text = f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
             send_telegram_message(
                 f"🟢 **{display_name} BUY CALL SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
@@ -673,6 +711,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         elif (
             (STRATEGY_MODE == "TREND" and prev_dir == 1 and curr_dir == -1 and sell_confirmed)
             or (STRATEGY_MODE == "ORB" and orb_sell_confirmed)
+            or (STRATEGY_MODE == "COMBINED" and combined_sell_confirmed)
         ):
             s["current_trade"] = 'SELL'
             s["entry_price"] = latest_price
@@ -701,11 +740,15 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
                     f"⚠️ हा फक्त अंदाज आहे (live data उपलब्ध नाही), actual प्रीमियम वेगळा असू शकतो\n\n"
                 )
 
-            sell_confirmation_text = (
-                f"✅ Confirmation: ORB Breakdown (Low: {s['or_low']}) | RSI {round(latest_rsi,1)}\n\n"
-                if STRATEGY_MODE == "ORB" else
-                f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
-            )
+            if STRATEGY_MODE == "ORB":
+                sell_confirmation_text = f"✅ Confirmation: ORB Breakdown (Low: {s['or_low']}) | RSI {round(latest_rsi,1)}\n\n"
+            elif STRATEGY_MODE == "COMBINED":
+                sell_confirmation_text = (
+                    f"✅ Confirmation: SuperTrend Flip | EMA9<EMA21 | RSI {round(latest_rsi,1)} | "
+                    f"ADX {round(latest_adx,1)} (Strong) | Price < OR Low ({s['or_low']})\n\n"
+                )
+            else:
+                sell_confirmation_text = f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
             send_telegram_message(
                 f"🔴 **{display_name} BUY PUT SIGNAL**\n\n"
                 f"👉 **ACTION: BUY {strikes['ATM']}** 👈\n\n"
