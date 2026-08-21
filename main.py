@@ -26,10 +26,49 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
 # Dobhi indices sathi config - navin index add karaycha asel tar ithe entry takaycha
-SYMBOLS = {
-    "NIFTY": {"ticker": "^NSEI", "lot_size": 50, "strike_step": 50, "display": "Nifty 50"},
-    "BANKNIFTY": {"ticker": "^NSEBANK", "lot_size": 15, "strike_step": 100, "display": "Bank Nifty"},
+# ⚠️ VERIFY KARA: khालचे lot_size ANDAJE ahet (जुन्या NSE revision वरून). Angel One app
+# madhe order place karताना actual lot size dakhavla jato - to eकदा check karून, khालche
+# आकडे barobar aahet ki nahi ते confirm kara, karan chukicha lot size = chukicha P&L calc.
+ALL_SYMBOLS = {
+    "NIFTY": {"ticker": "^NSEI", "lot_size": 65, "strike_step": 50, "display": "Nifty 50"},
+    "BANKNIFTY": {"ticker": "^NSEBANK", "lot_size": 30, "strike_step": 100, "display": "Bank Nifty"},
+    "SENSEX": {"ticker": "^BSESN", "lot_size": 20, "strike_step": 100, "display": "Sensex"},
+    "RELIANCE": {"ticker": "RELIANCE.NS", "lot_size": 500, "strike_step": 10, "display": "Reliance"},
+    "HDFCBANK": {"ticker": "HDFCBANK.NS", "lot_size": 650, "strike_step": 10, "display": "HDFC Bank"},
+    "ICICIBANK": {"ticker": "ICICIBANK.NS", "lot_size": 700, "strike_step": 10, "display": "ICICI Bank"},
+    "TCS": {"ticker": "TCS.NS", "lot_size": 225, "strike_step": 20, "display": "TCS"},
+    "INFY": {"ticker": "INFY.NS", "lot_size": 500, "strike_step": 10, "display": "Infosys"},
+    "SBIN": {"ticker": "SBIN.NS", "lot_size": 1875, "strike_step": 5, "display": "SBI"},
+    "AXISBANK": {"ticker": "AXISBANK.NS", "lot_size": 875, "strike_step": 5, "display": "Axis Bank"},
+    "ITC": {"ticker": "ITC.NS", "lot_size": 1575, "strike_step": 2.5, "display": "ITC"},
+    "LT": {"ticker": "LT.NS", "lot_size": 275, "strike_step": 20, "display": "L&T"},
+    "KOTAKBANK": {"ticker": "KOTAKBANK.NS", "lot_size": 400, "strike_step": 10, "display": "Kotak Bank"},
+    # Commodities (MCX) - yfinance नाही, Angel One cha Historical Data API vaparto (source="MCX")
+    # ⚠️ lot_size/strike_step ithe UNKNOWN ahet (verify na karता) - "/check-lot-sizes" route
+    # deploy zalyavar automatic shodhून deईl, tovar he 0 dakhavtील (trades sathi vaparले jaणar
+    # nahit jopर्yंत verify hot nahi).
+    "GOLD": {"ticker": None, "source": "MCX", "lot_size": 0, "strike_step": 0, "display": "Gold (MCX)"},
+    "SILVER": {"ticker": None, "source": "MCX", "lot_size": 0, "strike_step": 0, "display": "Silver (MCX)"},
+    "CRUDEOIL": {"ticker": None, "source": "MCX", "lot_size": 0, "strike_step": 0, "display": "Crude Oil (MCX)"},
 }
+
+# SYMBOL_GROUP env variable var adharun kontya symbols track karayche te thरवतो.
+# Yamule ekach code 2 veglya Render services var deploy karता येईल - ek indices sathi,
+# ek stocks sathi - donhi independent, ekmekanवर परिणाम na houता.
+# Render madhe SYMBOL_GROUP="INDICES" kiva SYMBOL_GROUP="STOCKS" kiva SYMBOL_GROUP="COMMODITIES" set kara.
+# Set nasel tar (default) sagळे symbols ekaच bot madhe (jase aata ahे).
+INDICES_KEYS = ["NIFTY", "BANKNIFTY", "SENSEX"]
+COMMODITY_KEYS = ["GOLD", "SILVER", "CRUDEOIL"]
+SYMBOL_GROUP = os.environ.get("SYMBOL_GROUP", "ALL")
+
+if SYMBOL_GROUP == "INDICES":
+    SYMBOLS = {k: v for k, v in ALL_SYMBOLS.items() if k in INDICES_KEYS}
+elif SYMBOL_GROUP == "STOCKS":
+    SYMBOLS = {k: v for k, v in ALL_SYMBOLS.items() if k not in INDICES_KEYS and k not in COMMODITY_KEYS}
+elif SYMBOL_GROUP == "COMMODITIES":
+    SYMBOLS = {k: v for k, v in ALL_SYMBOLS.items() if k in COMMODITY_KEYS}
+else:
+    SYMBOLS = ALL_SYMBOLS
 
 # Pratyek symbol sathi swतंत्र state
 state = {
@@ -68,6 +107,9 @@ last_error_date = ""
 
 STRATEGY_MODE = "ORB"  # "TREND" = SuperTrend+RSI+EMA+ADX (BUY+SELL donhi)
                         # "ORB" = Opening Range Breakout (fakt BUY, pahilya candle cha high todla tar)
+
+MAX_INITIAL_SL_POINTS = 20  # ORB madhe Opening Range khup wide asel tar risk itka jasta nasava
+                              # - ha maximum cap, actual SL (OR low/high) yापेksha jawal asel tar tोच vaparला jaईl
 
 DAILY_PROFIT_TARGET = 1000  # Rupees - ha target zala ki tya divsa navin trade nahi
 DAILY_LOSS_LIMIT = 1000     # Rupees - itka tota zala ki tya divsa navin trade nahi (capital protect karण्yasathi)
@@ -203,8 +245,7 @@ def try_get_real_premium(symbol_key, strike, option_type):
     if not BROKER_AVAILABLE:
         return None
     try:
-        name = "NIFTY" if symbol_key == "NIFTY" else "BANKNIFTY"
-        return broker.get_option_premium(name, strike, option_type)
+        return broker.get_option_premium(symbol_key, strike, option_type)
     except Exception as e:
         print(f"Real premium fetch error: {e}")
         return None
@@ -367,17 +408,28 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             send_telegram_message(levels_msg)
             s["last_levels_date"] = today_str
 
-    df = yf.download(tickers=ticker, period="5d", interval="5m", progress=False)
-    df = fix_multiindex(df)
-    if df.empty or len(df) < 20:
-        # yfinance kadhi kadhi temporary glitch deta - ekda parat try karto
-        import time
-        time.sleep(2)
+    is_mcx = cfg.get("source") == "MCX"
+
+    if is_mcx:
+        if not BROKER_AVAILABLE:
+            err = f"{display_name}: broker.py load nahi zala, MCX data milat nahi"
+            if last_error_msg != err or last_error_date != today_str:
+                send_telegram_message(f"⚠️ Bot Warning: {err}")
+                last_error_msg, last_error_date = err, today_str
+            return
+        df = broker.get_mcx_historical_df(symbol_key)
+    else:
         df = yf.download(tickers=ticker, period="5d", interval="5m", progress=False)
         df = fix_multiindex(df)
+        if df.empty or len(df) < 20:
+            # yfinance kadhi kadhi temporary glitch deta - ekda parat try karto
+            import time
+            time.sleep(2)
+            df = yf.download(tickers=ticker, period="5d", interval="5m", progress=False)
+            df = fix_multiindex(df)
 
-    if df.empty or len(df) < 20:
-        err = f"{display_name}: yfinance data empty ahe kiva 20 peksha kami rows aahet"
+    if df is None or df.empty or len(df) < 20:
+        err = f"{display_name}: data empty ahe kiva 20 peksha kami rows aahet"
         if last_error_msg != err or last_error_date != today_str:
             send_telegram_message(f"⚠️ Bot Warning: {err}")
             last_error_msg, last_error_date = err, today_str
@@ -565,12 +617,16 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     # fakt 09:20 nantarach ghyaycha. AANI 15:15 nantar navin trade ghyaycha NAHI -
     # (aadhi hya condition la vartchi limit navhती, tyamule 3:33 sarkhya veli navin
     # trade ughadla jayacha ani carry-forward houn motha risk yayacha - ha fix tyasathich)
-    if s["current_trade"] is None and current_time_str >= "09:17" and current_time_str < "15:15":
+    if (
+        s["current_trade"] is None
+        and current_time_str >= "09:17" and current_time_str < "15:15"
+        and lot_size > 0  # lot_size verify न झालेला (0) asel tar (MCX commodities) trade skip
+    ):
         entry_condition = orb_buy_confirmed if STRATEGY_MODE == "ORB" else (prev_dir == -1 and curr_dir == 1 and buy_confirmed)
         if entry_condition:
             s["current_trade"] = 'BUY'
             s["entry_price"] = latest_price
-            s["stop_loss"] = s["or_low"] if (STRATEGY_MODE == "ORB" and s["or_low"]) else latest_price - 15
+            s["stop_loss"] = max(s["or_low"], latest_price - MAX_INITIAL_SL_POINTS) if (STRATEGY_MODE == "ORB" and s["or_low"]) else latest_price - 15
             s["trade_date"] = today_str
             strikes = get_option_strikes(latest_price, 'BUY', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'BUY')
@@ -620,7 +676,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         ):
             s["current_trade"] = 'SELL'
             s["entry_price"] = latest_price
-            s["stop_loss"] = s["or_high"] if (STRATEGY_MODE == "ORB" and s["or_high"]) else latest_price + 15
+            s["stop_loss"] = min(s["or_high"], latest_price + MAX_INITIAL_SL_POINTS) if (STRATEGY_MODE == "ORB" and s["or_high"]) else latest_price + 15
             s["trade_date"] = today_str
             strikes = get_option_strikes(latest_price, 'SELL', strike_step)
             targets = get_targets(latest_price, s["stop_loss"], 'SELL')
@@ -756,6 +812,42 @@ def run_backtest_route():
         err_msg = f"❌ Backtest error: {e}"
         send_telegram_message(err_msg)
         return err_msg, 200
+
+
+@app.route('/check-lot-sizes')
+def check_lot_sizes_route():
+    """
+    Manually Angel One app madhe check karnyaऐवजी, Angel One cha scrip master
+    (जो broker.py आधीच download kartoy) vaparun sagळ्या symbols cha ACTUAL
+    current lot_size ani strike_step automatically kadhto - Telegram var pathavto.
+    """
+    if not BROKER_AVAILABLE:
+        msg = "❌ broker.py load zala nahi."
+        send_telegram_message(msg)
+        return msg, 200
+
+    session = broker.get_smart_api_session()
+    if session is None:
+        msg = f"❌ Angel One session nahi. कारण: {broker.get_last_error()}"
+        send_telegram_message(msg)
+        return msg, 200
+
+    send_telegram_message("⏳ Scrip master download hotoy, thoda vel lagel...")
+    lines = ["🔍 **LOT SIZE / STRIKE STEP CHECK** (Angel One scrip master वरून)\n"]
+    for symbol_key, cfg in SYMBOLS.items():
+        result = broker.auto_discover_lot_and_strikes(symbol_key)
+        if result and result["lot_size"]:
+            match_icon = "✅" if result["lot_size"] == cfg["lot_size"] else "⚠️ MISMATCH"
+            lines.append(
+                f"{symbol_key}: Actual lot={result['lot_size']} (code madhे: {cfg['lot_size']}) {match_icon} | "
+                f"Strike step: {result['strike_step']} (code madhे: {cfg['strike_step']})"
+            )
+        else:
+            lines.append(f"{symbol_key}: Scrip master madhe sapadla nahi (verify manually)")
+
+    report = "\n".join(lines)
+    send_telegram_message(report)
+    return "Lot size check complete.", 200
 
 
 @app.route('/telegram', methods=['POST'])
