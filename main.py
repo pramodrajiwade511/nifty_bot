@@ -1,7 +1,8 @@
 """
-MAIN BOT SERVER - TRADINGVIEW WEBHOOK RECIEVER
+MAIN BOT SERVER - WITH APP UI INTEGRATION
 ==================================================
-Ha server TradingView che signals catch करतो, 10-divasacha safety lock check karto,
+Ha server TradingView che signals catch करतो, templates/ मधून 
+दोन्ही UI स्क्रीन्स दाखवतो, 10-divasacha safety lock check karto,
 ani 15 Pts SL + Cost-to-Cost trailing logic chalavto.
 """
 
@@ -10,7 +11,8 @@ import hashlib
 import threading
 import time
 from datetime import datetime
-from flask import Flask, json, request
+# 🔥 नवीन बदल: HTML UI दाखवण्यासाठी render_template शब्द जोडला आहे
+from flask import Flask, json, request, render_template
 import requests
 
 # broker.py madhun functions ani WebSocket data import karne
@@ -23,7 +25,6 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # 📊 सिम्युलेटेड डेटाबेस (10-Divasacha Safety Lock ani 4-Anki PIN Record)
-# Tीप: Real-app madhe ithe Firebase database vaporla jail
 user_database = {
     "user_01": {
         "user_name": "योगेश",
@@ -47,6 +48,20 @@ def send_telegram_alert(message):
         print(f"Telegram Error: {e}")
 
 # ==================================================================
+# 🔥 NEW FEATURE: APP FRONTEND ROUTES (ॲपचे स्क्रीन्स दाखवणारे रस्ते)
+# ==================================================================
+
+# 📱 १. ॲप उघडल्यावर सर्वात आधी सुंदर डार्क लॉगिन स्क्रीन दिसण्यासाठी
+@app.route('/')
+def login_page():
+    return render_template('login.html')
+
+# 🔗 २. लॉगिन यशस्वी झाल्यावर ब्रोकर खाते जोडण्याचा स्क्रीन दिसण्यासाठी
+@app.route('/connect-broker')
+def broker_page():
+    return render_template('broker.html')
+
+# ==================================================================
 # 🔒 4-ANKI PIN VERIFICATION & LIVE ACTIVATION ROUTE
 # ==================================================================
 @app.route('/activate-live', methods=['POST'])
@@ -59,7 +74,6 @@ def activate_live():
     if not user:
         return {"status": "error", "message": "User sapadla nahi!"}
 
-    # 10 Divas purna zale ahet ka check karne
     days_passed = (datetime.now() - user["strategy_updated_at"]).days
     if days_passed < 10:
         return {
@@ -67,7 +81,6 @@ def activate_live():
             "message": f"🔒 Ajun {10 - days_passed} दिवस paper trading karne mandatory ahe. Tya shivay live karta yenar nahi!"
         }
 
-    # Pin check karne
     entered_hash = hashlib.sha256(entered_pin.encode()).hexdigest()
     if entered_hash == user["security_pin_hash"]:
         user["account_status"] = "LIVE_ACTIVE"
@@ -85,21 +98,17 @@ def tradingview_webhook():
     signal_data = request.json
     user = user_database["user_01"]
     
-    action = signal_data.get("action") # 'BUY' / 'SELL'
-    strike = int(signal_data.get("strike", 24600)) # Default/TV dware aleli strike
-    option_type = signal_data.get("option_type", "CE") # 'CE' / 'PE'
+    action = signal_data.get("action") 
+    strike = int(signal_data.get("strike", 24600)) 
+    option_type = signal_data.get("option_type", "CE") 
     
-    # Live Nifty rate check karne
     nifty_rate = NSE_LIVE_LTP if NSE_LIVE_LTP > 0 else float(signal_data.get("price", 24600))
-    
-    # Live option premium fetch karne (broker.py madhun)
     premium_price = get_option_premium("NIFTY", strike, option_type)
     if not premium_price:
-        premium_price = 100.0 # Fallback jar market band asel tar testing sathi
+        premium_price = 100.0 
         
     days_passed = (datetime.now() - user["strategy_updated_at"]).days
 
-    # 🛑 CASE 1: 10 Divas zale nahit -> Saktine PAPER TRADING
     if days_passed < 10 or user["account_status"] == "PAPER_LOCK":
         msg = (
             f"🗒️ *Paper Trade Alert!*\n"
@@ -110,10 +119,8 @@ def tradingview_webhook():
             f"🔒 Safety Lock Remaining: {10 - days_passed} days"
         )
         send_telegram_alert(msg)
-        # Background thread var trailing logic suru karne jenekarun server block honar nahi
         threading.Thread(target=run_trailing_logic, args=("NIFTY", strike, option_type, premium_price, False)).start()
 
-    # 🚀 CASE 2: 10 Divas purna ani User ne PIN takun permission dili ahe -> REAL TRADING
     elif user["account_status"] == "LIVE_ACTIVE":
         msg = (
             f"🚨 *Real Trade Alert! (Angel One)*\n"
@@ -123,8 +130,6 @@ def tradingview_webhook():
         )
         send_telegram_alert(msg)
         
-        # Real Order place karne (Lot size: 25 for Nifty)
-        # ⚠️ actual order execution find_option_instrument chya token var chalel
         from broker import find_option_instrument
         tsymbol, token = find_option_instrument("NIFTY", strike, option_type)
         if tsymbol and token:
@@ -142,27 +147,22 @@ def run_trailing_logic(name, strike, option_type, entry_price, is_live):
     is_at_cost = False
     mode = "LIVE" if is_live else "PAPER"
     
-    print(f"[{mode} Loop] Trailing suru zali. Entry: ₹{entry_price} | Initial SL: ₹{stop_loss}")
-    
     while True:
-        # Satat live option premium check karat rahne
         current_premium = get_option_premium(name, strike, option_type)
         if not current_premium:
-            current_premium = entry_price # Fallback loop break na honyasathi
+            current_premium = entry_price 
             
-        # Condition 1: Jar premium 10 point var gela (₹100 -> ₹110)
         if current_premium >= (entry_price + 10) and not is_at_cost:
-            stop_loss = entry_price # SL direct kharedi bhavavar (₹100) locked!
+            stop_loss = entry_price 
             is_at_cost = True
             send_telegram_alert(
                 f"📈 *SL Cost-to-Cost Jhala ({mode})!*\n"
                 f"🎯 NIFTY {strike} {option_type}\n"
                 f"🔥 Current Premium: ₹{current_premium}\n"
                 f"🔒 SL shifted to Entry Price: ₹{stop_loss}\n"
-                f"🛡️ Ata ha trade 100% safe ahe (Zero Loss Guarantee)!"
+                f"🛡️ Ata ha trade 100% safe ahe!"
             )
 
-        # Condition 2: Market reverse zale ani updated stop loss hit zala
         if current_premium <= stop_loss:
             exit_msg = (
                 f"⚠️ *Stop Loss Hit ({mode})!*\n"
@@ -172,7 +172,6 @@ def run_trailing_logic(name, strike, option_type, entry_price, is_live):
             )
             send_telegram_alert(exit_msg)
             
-            # Jar Live asel tar actual market order madhun exit karne
             if is_live:
                 from broker import find_option_instrument
                 tsymbol, token = find_option_instrument(name, strike, option_type)
@@ -180,14 +179,11 @@ def run_trailing_logic(name, strike, option_type, entry_price, is_live):
                     place_order(name, tsymbol, token, "SELL", 25)
             break
             
-        time.sleep(0.5) # Server var load yeu naye mhanun dar 0.5 sec la check karne
+        time.sleep(0.5)
 
 # ==================================================================
 # SERVER STARTUP
 # ==================================================================
 if __name__ == "__main__":
-    print("🚀 Bot backend system suru hot ahe...")
-    # Broker.py madhil NSE WebSocket data background la chalu karne
     init_nse_stream()
-    # Webhook reciever Flask server chalu karne (Render handle karel)
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
