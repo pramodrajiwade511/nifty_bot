@@ -86,6 +86,7 @@ state = {
         "last_status_time": None,
         "last_rsi": None,
         "last_adx": None,
+        "last_chop": None,
         "or_high": None,
         "or_low": None,
         "or_date": "",
@@ -460,6 +461,9 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     adx_col = next((c for c in adx_df.columns if c.startswith('ADX_')), None)
     df['ADX'] = adx_df[adx_col] if adx_col else None
 
+    chop_df = ta.chop(df['High'], df['Low'], df['Close'], length=14)
+    df['CHOP'] = chop_df if chop_df is not None else None
+
     latest_price = round(df['Close'].iloc[-1], 2)
     prev_dir = df['ST_DIR'].iloc[-2]
     curr_dir = df['ST_DIR'].iloc[-1]
@@ -468,6 +472,9 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     latest_ema9 = df['EMA9'].iloc[-1]
     latest_ema21 = df['EMA21'].iloc[-1]
     latest_adx = df['ADX'].iloc[-1] if df['ADX'] is not None else None
+    latest_chop = df['CHOP'].iloc[-1] if df['CHOP'] is not None else None
+    # Choppiness Index: >61 = sideways market, <38 = trending. Trend confirm karnyasathi <61 chek karto
+    market_not_choppy = (latest_chop is None) or pd.isna(latest_chop) or latest_chop < 61
     strong_trend = (latest_adx is not None) and (not pd.isna(latest_adx)) and latest_adx > 20
 
     # BUY confirm: RSI bullish zone, fast EMA slow EMA peksha var, ani trend मजबूत asel tarच
@@ -521,6 +528,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         and latest_ema9 > latest_ema21  # EMA confirmation
         and latest_rsi > 50  # RSI momentum
         and strong_trend  # ADX filter
+        and market_not_choppy  # Choppiness Index filter - sideways market nako
         and s["or_high"] is not None and latest_price > s["or_high"]  # ORB level break
         and double_candle_bullish  # mागchi candle pan bullish होती (fake spike nahi)
     )
@@ -530,6 +538,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
         and latest_ema9 < latest_ema21  # EMA confirmation
         and latest_rsi < 50  # RSI momentum
         and strong_trend  # ADX filter
+        and market_not_choppy  # Choppiness Index filter - sideways market nako
         and s["or_low"] is not None and latest_price < s["or_low"]  # ORB level break
         and double_candle_bearish  # mागchi candle pan bearish होती (fake spike nahi)
     )
@@ -540,6 +549,7 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
     s["last_status_time"] = now.strftime('%H:%M:%S')
     s["last_rsi"] = round(latest_rsi, 1) if not pd.isna(latest_rsi) else None
     s["last_adx"] = round(latest_adx, 1) if latest_adx is not None and not pd.isna(latest_adx) else None
+    s["last_chop"] = round(latest_chop, 1) if latest_chop is not None and not pd.isna(latest_chop) else None
     s["last_vwap"] = None  # ata vaparat nahi, EMA vaparto
 
     # Trade active असताना pratyek check la simple tick pathavto (channel style सारखं)
@@ -688,9 +698,10 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             if STRATEGY_MODE == "ORB":
                 confirmation_text = f"✅ Confirmation: ORB Breakout (High: {s['or_high']}) | RSI {round(latest_rsi,1)}\n\n"
             elif STRATEGY_MODE == "COMBINED":
+                chop_display = round(latest_chop, 1) if latest_chop is not None and not pd.isna(latest_chop) else "N/A"
                 confirmation_text = (
                     f"✅ Confirmation: SuperTrend Flip | EMA9>EMA21 | RSI {round(latest_rsi,1)} | "
-                    f"ADX {round(latest_adx,1)} (Strong) | Price > OR High ({s['or_high']})\n\n"
+                    f"ADX {round(latest_adx,1)} (Strong) | Choppiness {chop_display} (Trending) | Price > OR High ({s['or_high']})\n\n"
                 )
             else:
                 confirmation_text = f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 > EMA21 (Uptrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
@@ -743,9 +754,10 @@ def check_signals_for_symbol(symbol_key, now, today_str, current_time_str):
             if STRATEGY_MODE == "ORB":
                 sell_confirmation_text = f"✅ Confirmation: ORB Breakdown (Low: {s['or_low']}) | RSI {round(latest_rsi,1)}\n\n"
             elif STRATEGY_MODE == "COMBINED":
+                chop_display = round(latest_chop, 1) if latest_chop is not None and not pd.isna(latest_chop) else "N/A"
                 sell_confirmation_text = (
                     f"✅ Confirmation: SuperTrend Flip | EMA9<EMA21 | RSI {round(latest_rsi,1)} | "
-                    f"ADX {round(latest_adx,1)} (Strong) | Price < OR Low ({s['or_low']})\n\n"
+                    f"ADX {round(latest_adx,1)} (Strong) | Choppiness {chop_display} (Trending) | Price < OR Low ({s['or_low']})\n\n"
                 )
             else:
                 sell_confirmation_text = f"✅ Confirmation: RSI {round(latest_rsi,1)} | EMA9 < EMA21 (Downtrend) | ADX {round(latest_adx,1)} (Strong Trend)\n\n"
@@ -940,7 +952,7 @@ def telegram_webhook():
                     f"💹 शेवटची किंमत: {s['last_status_price'] or 'N/A'}\n"
                     f"📈 सध्याचा ट्रेंड: {dir_text}\n"
                     f"📌 सध्याचा ट्रेड: {trade_text}\n"
-                    f"📐 RSI: {s['last_rsi'] or 'N/A'} | ADX: {s['last_adx'] or 'N/A'}"
+                    f"📐 RSI: {s['last_rsi'] or 'N/A'} | ADX: {s['last_adx'] or 'N/A'} | Choppiness: {s.get('last_chop') or 'N/A'}"
                 )
             if last_error_msg:
                 lines.append(f"\n⚠️ शेवटची एरर: {last_error_msg}")
