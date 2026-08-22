@@ -1,9 +1,9 @@
 """
-MAIN BOT SERVER - WITH APP UI INTEGRATION
+MAIN BOT SERVER - FINAL BUILT-IN UI EDITION
 ==================================================
 Ha server TradingView che signals catch करतो, templates/ मधून 
-दोन्ही UI स्क्रीन्स दाखवतो, 10-divasacha safety lock check karto,
-ani 15 Pts SL + Cost-to-Cost trailing logic chalavto.
+तिन्ही मुख्य UI स्क्रीन्स (Login, Broker, Dashboard) दाखवतो, 
+10-divasacha safety lock check karto, ani trailing logic chalavto.
 """
 
 import os
@@ -11,7 +11,7 @@ import hashlib
 import threading
 import time
 from datetime import datetime
-# 🔥 नवीन बदल: HTML UI दाखवण्यासाठी render_template शब्द जोडला आहे
+# Flask चा render_template शब्द सुरक्षितपणे जोडला आहे
 from flask import Flask, json, request, render_template
 import requests
 
@@ -48,18 +48,23 @@ def send_telegram_alert(message):
         print(f"Telegram Error: {e}")
 
 # ==================================================================
-# 🔥 NEW FEATURE: APP FRONTEND ROUTES (ॲपचे स्क्रीन्स दाखवणारे रस्ते)
+# 📱 APP FRONTEND ROUTES (ॲपचे स्क्रीन्स दाखवणारे रस्ते - नवीन अपडेट)
 # ==================================================================
 
-# 📱 १. ॲप उघडल्यावर सर्वात आधी सुंदर डार्क लॉगिन स्क्रीन दिसण्यासाठी
+# १. ॲप उघडल्यावर सर्वात आधी सुंदर डार्क लॉगिन स्क्रीन दिसण्यासाठी
 @app.route('/')
 def login_page():
     return render_template('login.html')
 
-# 🔗 २. लॉगिन यशस्वी झाल्यावर ब्रोकर खाते जोडण्याचा स्क्रीन दिसण्यासाठी
+# २. लॉगिन यशस्वी झाल्यावर ब्रोकर खाते जोडण्याचा स्क्रीन दिसण्यासाठी
 @app.route('/connect-broker')
 def broker_page():
     return render_template('broker.html')
+
+# ३. 📊 लाईव्ह नफा-तोटा काउंटर आणि प्रोग्रेस बार पाहण्यासाठी
+@app.route('/dashboard')
+def dashboard_page():
+    return render_template('dashboard.html')
 
 # ==================================================================
 # 🔒 4-ANKI PIN VERIFICATION & LIVE ACTIVATION ROUTE
