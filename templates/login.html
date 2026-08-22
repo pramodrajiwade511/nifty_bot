@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>सुरक्षित अल्गो बॉट लॉगिन</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+        .login-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            width: 350px;
+            text-align: center;
+            border: 1px rgba(255, 255, 255, 0.2) solid;
+        }
+        h2 { margin-bottom: 10px; font-size: 24px; }
+        p { font-size: 14px; opacity: 0.8; margin-bottom: 30px; }
+        .btn-google {
+            background-color: #fff;
+            color: #333;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: 0.3s;
+        }
+        .btn-google:hover { transform: translateY(-2px); }
+        .pin-section {
+            margin-top: 25px;
+            display: none;
+        }
+        .pin-input {
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            text-align: center;
+            margin: 5px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<div class="login-container">
+    <h2>🛡️ Safe Algo Bot</h2>
+    <p>नोकरदार आणि गरजू लोकांसाठी भारतातील सर्वात सुरक्षित अँटी-लॉस ट्रेडिंग ॲप</p>
+    <button class="btn-google" onclick="showPinSection()">
+        <img src="https://wikimedia.org" width="20" alt="Google">
+        Gmail आयडीने लॉगिन करा
+    </button>
+    <div class="pin-section" id="pinSection">
+        <h3>🔒 गुप्त परमिशन PIN सेट करा</h3>
+        <p>१० दिवसांनंतर लाईव्ह ट्रेडिंग सुरू करण्यासाठी हा पिन आवश्यक असेल.</p>
+        <input type="password" class="pin-input" maxlength="1" onkeyup="moveFocus(this, 'p2')">
+        <input type="password" class="pin-input" id="p2" maxlength="1" onkeyup="moveFocus(this, 'p3')">
+        <input type="password" class="pin-input" id="p3" maxlength="1" onkeyup="moveFocus(this, 'p4')">
+        <input type="password" class="pin-input" id="p4" maxlength="1">
+        <br><br>
+        <button class="btn-google" style="background-color: #4CAF50; color: white;" onclick="savePinAndProceed()">पिन सेव्ह करा & पुढे चला</button>
+    </div>
+</div>
+<script>
+    function showPinSection() { document.getElementById('pinSection').style.display = 'block'; }
+    function moveFocus(current, nextId) { if (current.value.length >= 1) { document.getElementById(nextId).focus(); } }
+    function savePinAndProceed() { alert("✅ तुमचा ४-अंकी पिन आणि Gmail लॉगिन यशस्वीरित्या सेव्ह झाले आहे!"); }
+</script>
+</body>
+</html>
