@@ -5,3 +5,5 @@ smartapi-python
 pandas
 gunicorn
 websocket-client
+logzero
+
