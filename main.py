@@ -3,31 +3,21 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import broker
 import os
-import requests
 import datetime
 import pandas as pd
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# ⚠️ तुमची टेलिग्राम माहिती इथे भरा
-TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-
-def send_telegram_alert(message):
-    try:
-        url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
-        requests.post(url, json=payload)
-    except Exception: pass
-
-# --- ⏰ टाइम शेड्युलर लॉजिक ---
+# --- ⏰ टाइम शेड्युलर लॉजिक (९:०० आणि ९:१十六) ---
 def morning_wish():
-    send_telegram_alert("🌄 *शुभ सकाळ, प्रमोद भाऊ आणि कामगार बांधवांनो!* \n\nSafeAlgoBot रेडी आहे. आजच्या सुरक्षित ट्रेडिंगसाठी सर्वांना खूप शुभेच्छा! 🌄🌄")
+    print("🌄 शुभ सकाळ, प्रमोद भाऊ आणि कामगार बांधवांनो!")
 
 def auto_start_bot():
     try:
+        db = firestore.client()
+        broker.db = db
         session = broker.get_smart_api_session()
         if session:
-            send_telegram_alert("🚀 *SafeAlgoBot अपडेट:* सकाळी ०९:१६ झाले आहेत. सिस्टीमने फायरबेसमधून एमपिन वाचून ऑटो-लॉगिन पूर्ण केले आहे! 🤖")
+            print("🚀 SafeAlgoBot अपडेट: ऑटो-लॉगिन पूर्ण झाले आहे!")
     except Exception: pass
 
 if "scheduler_started" not in st.session_state:
@@ -37,7 +27,7 @@ if "scheduler_started" not in st.session_state:
     scheduler.start()
     st.session_state.scheduler_started = True
 
-# --- ⚙️ फायरबेस कनेक्शन (नवीन मजबूत लॉजिक - एरर फिक्स) ---
+# --- ⚙️ फायरबेस कनेक्शन ---
 db = None
 if not firebase_admin._apps:
     try:
@@ -46,7 +36,6 @@ if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
             db = firestore.client()
         else:
-            # जर फाईल सापडली नाही तर डीफॉल्ट ॲप सुरू करणे
             firebase_admin.initialize_app()
             db = firestore.client()
     except Exception as e:
@@ -62,7 +51,7 @@ st.title("🛡️ SafeAlgoBot - 'नो लॉस' कामगार विश�
 
 # जर डेटाबेस कनेक्ट नसेल तर युझरला सावध करणे
 if db is None:
-    st.error("❌ फायरबेस डेटाबेसशी कनेक्शन होऊ शकले नाही! कृपया 'firebase_key.json' तपासा.")
+    st.error("❌ फायरबेस डेटाबेसशी कनेक्शन होऊ शकले नाही! कृपया 'firebase_key.json' तत्या सांगा.")
     st.stop()
 
 # --- 📊 P&L डॅशबोर्ड ---
@@ -118,20 +107,6 @@ if st.button("🚀 'नो लॉस' अल्गो ट्रेड TRIGER क
         })
         
         pnl_ref.update({"daily_pnl": daily_pnl + gross_trade_pnl, "total_brokerage": total_brokerage + trade_brokerage})
-        
-        report = (
-            f"🛡️ *[SAFE ALGO BOT - NO LOSS PROTECTED]*\n"
-            f"-------------------------------------\n"
-            f"✅ *ट्रेड:* {symbol_input.upper()} BUY\n"
-            f"🛫 *खरेदी भाव (Entry):* ₹{entry_price}\n"
-            f"📉 *चार्टनुसार सुरवातीचा स्टॉपलॉस:* ₹{market_sl} ({calculated_sl_pts} pts दूर)\n"
-            f"⚡ *फास्ट ट्रेलिंग कवच:* किंमत ₹११० वर जाताच, एसएल डायरेक्ट ₹{entry_price} (खरेदी भावावर) लॉक होईल!\n"
-            f"🛑 *सुरक्षा:* मार्केट इथून रिव्हर्स फिरले तरी *NO LOSS* मध्ये ट्रेड कट होईल! 🤝\n"
-            f"🛬 *टार्गेट (Target):* ₹{exit_price}\n"
-            f"-------------------------------------\n"
-            f"🆔 *ऑर्डर ID:* {res.get('order_id')}"
-        )
-        send_telegram_alert(report)
         st.rerun()
     else:
         st.error(f"फेल: {res.get('message')}")
