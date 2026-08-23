@@ -67,14 +67,12 @@ def place_order(tradingsymbol, exchange, transactiontype, quantity, price, order
         return {"status": False, "message": "ब्रोकर सेशन उपलब्ध नाही."}
     
     try:
-        # एक्सचेंज आणि सिम्बॉल नुसार टोकन मॅपिंग (इथे गरज पडल्यास टोकन टाकावे लागेल)
-        # सध्या मार्केट ऑर्डरसाठी पॅरामीटर्स तयार करत आहे
         order_params = {
             "variety": "NORMAL",
             "tradingsymbol": tradingsymbol,
-            "symboltoken": "9992600", # उदा. NIFTY साठी योग्य टोकन मॅप करावे लागेल
-            "transactiontype": transactiontype, # BUY किंवा SELL
-            "exchange": exchange, # NSE किंवा NFO
+            "symboltoken": "9992600", 
+            "transactiontype": transactiontype, 
+            "exchange": exchange, 
             "ordertype": ordertype,
             "producttype": producttype,
             "duration": "DAY",
@@ -98,8 +96,6 @@ def get_option_premium(symbol, strike_price, option_type):
     if obj is None:
         return 0.0
     try:
-        # एंजेल वन API कडून मार्केट डेटा मिळवणे
-        # नमुना म्हणून सध्या ०.० रिटर्न करत आहे, तुम्ही एलटीपी फेचिंग लॉजिक जोडू शकता
         return 0.0
     except Exception as e:
         print(f"Premium fetch error: {str(e)}")
@@ -108,7 +104,7 @@ def get_option_premium(symbol, strike_price, option_type):
 # ४. एनएसई लाइव्ह स्ट्रीम चालू करण्याचे फंक्शन
 def init_nse_stream():
     """
-    NSE मार्केट डेटा फीड / वेबसॉकेट सुरू करणे.
+    NSE脫 मार्केट डेटा फीड / वेबसॉकेट सुरू करणे.
     """
     obj = get_smart_api_session()
     if obj is None:
