@@ -7,7 +7,7 @@ import datetime
 import pandas as pd
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# --- ⏰ टाइम शेड्युलर लॉजिक (९:०० आणि ९:१十六) ---
+# --- ⏰ टाइम शेड्युलर लॉजिक ---
 def morning_wish():
     print("🌄 शुभ सकाळ, प्रमोद भाऊ आणि कामगार बांधवांनो!")
 
@@ -16,8 +16,6 @@ def auto_start_bot():
         db = firestore.client()
         broker.db = db
         session = broker.get_smart_api_session()
-        if session:
-            print("🚀 SafeAlgoBot अपडेट: ऑटो-लॉगिन पूर्ण झाले आहे!")
     except Exception: pass
 
 if "scheduler_started" not in st.session_state:
@@ -49,14 +47,21 @@ broker.db = db
 st.set_page_config(page_title="SafeAlgoBot No Loss", page_icon="🛡️", layout="centered")
 st.title("🛡️ SafeAlgoBot - 'नो लॉस' कामगार विशेष")
 
-# जर डेटाबेस कनेक्ट नसेल तर युझरला सावध करणे
 if db is None:
-    st.error("❌ फायरबेस डेटाबेसशी कनेक्शन होऊ शकले नाही! कृपया 'firebase_key.json' तत्या सांगा.")
+    st.error("❌ फायरबेस डेटाबेसशी कनेक्शन होऊ शकले नाही!")
     st.stop()
 
-# --- 📊 P&L डॅशबोर्ड ---
+# --- 📊 P&L डॅशボード (स्लो सिस्टीम फिक्स लॉजिक) ---
 pnl_ref = db.collection('pnl_tracker').document('user_01')
-pnl_data = pnl_ref.get().to_dict() or {"daily_pnl": 0.0, "weekly_pnl": 0.0, "total_brokerage": 0.0}
+pnl_doc = pnl_ref.get()
+
+# 🎯 जर डेटाबेसमध्ये अजून कप्पा नसेल तर तो जागच्या जागी तयार करणे (ॲप फास्ट चालण्यासाठी)
+if not pnl_doc.exists:
+    pnl_data = {"daily_pnl": 0.0, "weekly_pnl": 0.0, "total_brokerage": 0.0}
+    pnl_ref.set(pnl_data)
+else:
+    pnl_data = pnl_doc.to_dict()
+
 daily_pnl = pnl_data.get("daily_pnl", 0.0)
 total_brokerage = pnl_data.get("total_brokerage", 0.0)
 net_pnl = daily_pnl - total_brokerage
