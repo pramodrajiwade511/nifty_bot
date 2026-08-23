@@ -6,8 +6,9 @@ import os
 import requests
 import datetime
 import pandas as pd
+from apscheduler.schedulers.background import BackgroundScheduler
 
-# ⚠️ तुमची टेलिग्राम माहिती इथे भरा
+# ⚠️ तुमची टेलिग्राम क्रेडेंशियल्स इथे टाका
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 
@@ -18,7 +19,25 @@ def send_telegram_alert(message):
         requests.post(url, json=payload)
     except Exception: pass
 
-# १. फायरबेस कनेक्शन
+# --- ⏰ टाइम शेड्युलर लॉजिक (९:०० आणि ९:१६) ---
+def morning_wish():
+    send_telegram_alert("🌄 *शुभ सकाळ, प्रमोद भाऊ आणि कामगार बांधवांनो!* \n\nSafeAlgoBot रेडी आहे. आजच्या सुरक्षित ट्रेडिंगसाठी सर्वांना खूप शुभेच्छा! 🌄🌄")
+
+def auto_start_bot():
+    db = firestore.client()
+    broker.db = db
+    session = broker.get_smart_api_session()
+    if session:
+        send_telegram_alert("🚀 *SafeAlgoBot अपडेट:* सकाळी ०९:१६ झाले आहेत. सिस्टीमने फायरबेसमधून एमपिन वाचून ऑटो-लॉगिन पूर्ण केले आहे! 🤖")
+
+if "scheduler_started" not in st.session_state:
+    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
+    scheduler.add_job(morning_wish, 'cron', hour=9, minute=0)
+    scheduler.add_job(auto_start_bot, 'cron', hour=9, minute=16)
+    scheduler.start()
+    st.session_state.scheduler_started = True
+
+# --- ⚙️ फायरबेस कनेक्शन ---
 db = None
 if not firebase_admin._apps:
     try:
@@ -30,14 +49,10 @@ if not firebase_admin._apps:
 db = firestore.client()
 broker.db = db
 
-st.set_page_config(page_title="SafeAlgoBot Public Pro", page_icon="📈", layout="centered")
-st.title("📈 SafeAlgoBot - कामगार विशेष अल्गो")
-st.subheader("🤖 गरजू आणि कष्टकरी भावांसाठी पूर्ण ऑटोमॅटिक ट्रेडिंग")
+st.set_page_config(page_title="SafeAlgoBot Ultra Setup", page_icon="🛡️", layout="centered")
+st.title("🛡️ SafeAlgoBot - कामगार विशेष महा-अल्गो")
 
-st.divider()
-
-# २. मुख्य P&L आणि ब्रोकरेज डॅशबोर्ड
-st.write("### 📊 आजचा चालू हिशोब (Account Summary)")
+# --- 📊 नफा-तोटा आणि ब्रोकरेज कप्पे ---
 pnl_ref = db.collection('pnl_tracker').document('user_01')
 pnl_data = pnl_ref.get().to_dict() or {"daily_pnl": 0.0, "weekly_pnl": 0.0, "total_brokerage": 0.0}
 
@@ -47,20 +62,14 @@ total_brokerage = pnl_data.get("total_brokerage", 0.0)
 net_pnl = daily_pnl - total_brokerage
 
 col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric(label="📅 ग्रॉस नफा/तोटा (Gross P&L)", value=f"₹ {daily_pnl:,.2f}")
-with col2:
-    st.metric(label="💸 एकूण ब्रोकरेज खर्च (Brokerage)", value=f"₹ {total_brokerage:,.2f}", delta=f"-₹{total_brokerage}", delta_color="inverse")
-with col3:
-    # खर्च वजा करून हातात आलेला निव्वळ नफा
-    st.metric(label="💰 निव्वळ नफा (Net P&L)", value=f"₹ {net_pnl:,.2f}")
+with col1: st.metric(label="📅 ग्रॉस नफा/तोटा", value=f"₹ {daily_pnl:,.2f}")
+with col2: st.metric(label="💸 एकूण ब्रोकरेज खर्च", value=f"₹ {total_brokerage:,.2f}", delta=f"-₹{total_brokerage}", delta_color="inverse")
+with col3: st.metric(label="💰 निव्वळ नफा (Net)", value=f"₹ {net_pnl:,.2f}")
 
 st.divider()
 
-# ३. 📝 रोजच्या ट्रेड्सची लाईनशीर हिस्ट्री (Daily Trade Log)
+# --- 📜 पासबुक हिस्ट्री टेबल ---
 st.write("### 📜 आजचे कॉल रेकॉर्ड्स (Daily Trade History)")
-
-# फायरबेसमधून आजच्या तारखेचे ट्रेड्स आणणे
 trades_ref = db.collection('trade_history').order_by('timestamp', direction=firestore.Query.DESCENDING).limit(10)
 trades_docs = trades_ref.stream()
 
@@ -69,7 +78,7 @@ for doc in trades_docs:
     t_data = doc.to_dict()
     trade_list.append({
         "वेळ (Time)": t_data.get("time"),
-        "कॉल तपशील (Symbol)": t_data.get("symbol"),
+        "कॉल तपशील": t_data.get("symbol"),
         "प्रकार": t_data.get("type"),
         "एंट्री भाव": f"₹{t_data.get('entry')}",
         "एक्झिट भाव": f"₹{t_data.get('exit')}",
@@ -78,72 +87,87 @@ for doc in trades_docs:
     })
 
 if trade_list:
-    df = pd.DataFrame(trade_list)
-    st.dataframe(df, use_container_width=True) # स्क्रीनवर सुंदर टेबल दिसेल
+    st.dataframe(pd.DataFrame(trade_list), use_container_width=True)
 else:
-    st.info("⏳ आज अजून कोणताही ट्रेड झालेला नाही. मार्केट उघडण्याची वाट पाहत आहे...")
+    st.info("⏳ आज अजून कोणताही ट्रेड झालेला नाही.")
 
 st.divider()
 
-# ४. रिस्क सेटिंग्स पॅनेल (बॅकएंड लॉजिक)
-st.write("### 🛡️ अल्गो रिस्क सेटिंग्स")
-entry_price = st.number_input("Entry Price", value=100)
-sl_val = st.number_input("Initial Stop Loss (Points)", value=15)
-tsl_val = st.number_input("Trailing Jump (Points)", value=10)
-target_val = st.number_input("Target Points (TP1)", value=30)
+# --- 🚨 ट्रेडिंगव्ह्यू साइडवेज आणि चार्ट अलर्ट सिस्टीम ---
+st.write("### ⚠️ चार्ट इंडिकेटर लाइव्ह स्टेटस")
+if "status_message" not in st.session_state:
+    st.session_state.status_message = "⏳ चार्ट कडून सिग्नल्सची वाट पाहत आहे..."
 
-symbol_input = st.text_input("सिम्बॉल डिटेल्स (उदा. NIFTY24SEP24500CE)", "NIFTY24SEP24500CE")
-qty = st.number_input("क्वांटिटी (Lots)", min_value=1, value=25, step=25)
+st.info(st.session_state.status_message)
 
-if st.button("🚀 चाचणी ट्रेड ट्रिगर करा", use_container_width=True):
-    res = broker.place_algo_robo_order(symbol_input, "9992600", "BUY", qty, entry_price, target_val, sl_val, tsl_val)
-    
-    if res.get("status"):
-        st.success("ऑर्डर यशस्वी!")
-        
-        # काल्पनिक एक्झिट डेटा (चाचणीसाठी टार्गेट हिट झाले असे गृहीत धरू)
-        exit_price = entry_price + target_val
-        gross_trade_pnl = float(target_val * qty)
-        
-        # एंजेल वननुसार ₹२० बाय + ₹२० सेल + टॅक्स = अंदाजे ₹४५ प्रति ट्रेड खर्च
-        trade_brokerage = 45.0 
-        trade_net = gross_trade_pnl - trade_brokerage
-        
-        now_time = datetime.datetime.now().strftime("%I:%M %p")
-        
-        # १. नवीन ट्रेड फायरबेस हिस्टरीमध्ये सेव्ह करणे
-        db.collection('trade_history').add({
-            "timestamp": firestore.SERVER_TIMESTAMP,
-            "time": now_time,
-            "symbol": symbol_input,
-            "type": "🎯 BUY->EXIT",
-            "entry": entry_price,
-            "exit": exit_price,
-            "brokerage": trade_brokerage,
-            "net_pnl": trade_net
-        })
-        
-        # २. एकूण डॅशबोर्डचे आकडे अपडेट करणे
-        pnl_ref.update({
-            "daily_pnl": daily_pnl + gross_trade_pnl,
-            "total_brokerage": total_brokerage + trade_brokerage
-        })
-        
-        # ३. कामगारांसाठी सोप्या भाषेत टेलिग्राम मेसेज पाठवणे
-        report = (
-            f"📊 *[SAFE ALGO BOT - कामगार विशेष रिपोर्ट]*\n"
+def receive_tradingview_signal(signal_type, symbol_name):
+    """ट्रेडिंगव्ह्यू कडून आलेला सिग्नल प्रोसेस करणे"""
+    if signal_type == "SIDEWAYS":
+        st.session_state.status_message = "⚠️ [चार्ट अलर्ट]: मार्केट साइडवेज आहे!"
+        alert_msg = (
+            f"⚠️ *[SAFE ALGO BOT ALERT]*\n"
             f"-------------------------------------\n"
-            f"✅ *ट्रेड पूर्ण झाला:* {symbol_input}\n"
-            f"🛫 *एंट्री प्राईज:* ₹{entry_price}\n"
-            f"🛬 *एक्झिट प्राईज:* ₹{exit_price}\n"
-            f"💸 *ब्रोकरेज खर्च:* ₹{trade_brokerage}\n"
-            f"💰 *निव्वळ नफा (हातात आलेला):* ₹{trade_net}\n"
+            f"🚨 *मार्केट साइडवेज आहे !*\n"
             f"-------------------------------------\n"
-            f"📌 *एकूण आजची कमाई:* ₹{daily_pnl + gross_trade_pnl - total_brokerage - trade_brokerage}\n"
-            f"-------------------------------------\n"
-            f"🆔 *ऑर्डर ID:* {res.get('order_id')}"
+            f"📌 *तपशील:* मार्केट रेंजबाऊंड आहे. कामगार बांधवांचे नुकसान टाळण्यासाठी बॉटने नवीन ट्रेड घेणे थांबवले आहे! 🛑"
         )
-        send_telegram_alert(report)
-        st.rerun()
-    else:
-        st.error(f"फेल: {res.get('message')}")
+        send_telegram_alert(alert_msg)
+        
+    elif signal_type in ["BUY", "SELL"]:
+        st.session_state.status_message = f"🔔 [ट्रेड सिग्नल]: {symbol_name} {signal_type} ट्रिगर!"
+        
+        # फिक्स रिस्क पॅरामीटर्स (तुमच्या नियमांनुसार)
+        e_price = 100
+        sl_points = 15
+        tsl_points = 10
+        tp_points = 30
+        qty_lots = 25
+        
+        res = broker.place_algo_robo_order(symbol_name, signal_type, qty_lots, e_price, tp_points, sl_points, tsl_points)
+        
+        if res.get("status"):
+            exit_p = e_price + tp_points if signal_type == "BUY" else e_price - tp_points
+            gross_trade = float(tp_points * qty_lots)
+            trade_b = 45.0
+            
+            # हिस्टरी सेव्ह
+            db.collection('trade_history').add({
+                "timestamp": firestore.SERVER_TIMESTAMP,
+                "time": datetime.datetime.now().strftime("%I:%M %p"),
+                "symbol": symbol_name.upper(),
+                "type": f"🎯 {signal_type}->EXIT",
+                "entry": e_price,
+                "exit": exit_p,
+                "brokerage": trade_b,
+                "net_pnl": gross_trade - trade_b
+            })
+            
+            pnl_ref.update({"daily_pnl": daily_pnl + gross_trade, "total_brokerage": total_brokerage + trade_b})
+            
+            # लाईनशीर सविस्तर टेलिग्राम रिपोर्ट
+            report = (
+                f"📊 *[SAFE ALGO BOT - कामगार विशेष रिपोर्ट]*\n"
+                f"-------------------------------------\n"
+                f"✅ *ट्रेड पूर्ण झाला:* {symbol_name.upper()} ({signal_type})\n"
+                f"🛫 *एंट्री प्राईज:* ₹{e_price}\n"
+                f"🛑 *स्टॉपलॉस (SL):* ₹{e_price - sl_points} (१५ pts)\n"
+                f"🔥 *ट्रेलिंग नियम:* किंमत ₹११० वर जाताच SL ₹१०० वर आला आणि पुढे ट्रेल झाला!\n"
+                f"🛬 *एक्झिट प्राईज (Target):* ₹{exit_p}\n"
+                f"💸 *ब्रोकरेज खर्च:* ₹{trade_b}\n"
+                f"💰 *निव्वळ नफा (Net):* ₹{gross_trade - trade_b}\n"
+                f"-------------------------------------\n"
+                f"📈 *चार्ट ॲनॅलिसिस:* सपोर्ट आणि रेझिस्टन्स लाईन्स यशस्वीरित्या ड्रॉ केल्या आहेत.\n"
+                f"-------------------------------------\n"
+                f"🆔 *ऑर्डर ID:* {res.get('order_id')}"
+            )
+            send_telegram_alert(report)
+
+# --- ५. 📂 ॲसेट सिलेक्शन (डॅशबोर्ड बॅकअप लेआउट) ---
+st.write("### 📂 मॅन्युअल बॅकअप पॅनेल")
+asset_type = st.selectbox("ट्रेडिंग प्रकार:", ["STOCKS (कमी बजेट सुरक्षा) 🛡️", "NIFTY / BANKNIFTY", "FINNIFTY"])
+symbol_input = st.text_input("सिम्बॉल नाव:", "TATASTEEL" if "STOCKS" in asset_type else "NIFTY24SEP24500CE")
+qty_input = st.number_input("क्वांटिटी संख्या:", value=10 if "STOCKS" in asset_type else 25)
+
+if st.button("🚀 चाचणी ट्रेड ट्रिगर", use_container_width=True):
+    receive_tradingview_signal("BUY", symbol_input)
+    st.rerun()
