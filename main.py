@@ -6,6 +6,7 @@ import os
 import requests
 import datetime
 import pandas as pd
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # ⚠️ तुमची टेलिग्राम माहिती इथे भरा
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
@@ -18,18 +19,51 @@ def send_telegram_alert(message):
         requests.post(url, json=payload)
     except Exception: pass
 
+# --- ⏰ टाइम शेड्युलर लॉजिक ---
+def morning_wish():
+    send_telegram_alert("🌄 *शुभ सकाळ, प्रमोद भाऊ आणि कामगार बांधवांनो!* \n\nSafeAlgoBot रेडी आहे. आजच्या सुरक्षित ट्रेडिंगसाठी सर्वांना खूप शुभेच्छा! 🌄🌄")
+
+def auto_start_bot():
+    try:
+        session = broker.get_smart_api_session()
+        if session:
+            send_telegram_alert("🚀 *SafeAlgoBot अपडेट:* सकाळी ०९:१६ झाले आहेत. सिस्टीमने फायरबेसमधून एमपिन वाचून ऑटो-लॉगिन पूर्ण केले आहे! 🤖")
+    except Exception: pass
+
+if "scheduler_started" not in st.session_state:
+    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
+    scheduler.add_job(morning_wish, 'cron', hour=9, minute=0)
+    scheduler.add_job(auto_start_bot, 'cron', hour=9, minute=16)
+    scheduler.start()
+    st.session_state.scheduler_started = True
+
+# --- ⚙️ फायरबेस कनेक्शन (नवीन मजबूत लॉजिक - एरर फिक्स) ---
+db = None
 if not firebase_admin._apps:
     try:
         if os.path.exists('firebase_key.json'):
             cred = credentials.Certificate('firebase_key.json')
             firebase_admin.initialize_app(cred)
-    except Exception: pass
+            db = firestore.client()
+        else:
+            # जर फाईल सापडली नाही तर डीफॉल्ट ॲप सुरू करणे
+            firebase_admin.initialize_app()
+            db = firestore.client()
+    except Exception as e:
+        st.error(f"फायरबेस कनेक्शन एरर: {e}")
+else:
+    db = firestore.client()
 
-db = firestore.client()
 broker.db = db
 
+# --- डॅशबोर्ड स्क्रीनची सुरुवात ---
 st.set_page_config(page_title="SafeAlgoBot No Loss", page_icon="🛡️", layout="centered")
 st.title("🛡️ SafeAlgoBot - 'नो लॉस' कामगार विशेष")
+
+# जर डेटाबेस कनेक्ट नसेल तर युझरला सावध करणे
+if db is None:
+    st.error("❌ फायरबेस डेटाबेसशी कनेक्शन होऊ शकले नाही! कृपया 'firebase_key.json' तपासा.")
+    st.stop()
 
 # --- 📊 P&L डॅशबोर्ड ---
 pnl_ref = db.collection('pnl_tracker').document('user_01')
@@ -61,7 +95,7 @@ with col_in2:
 target_val = st.number_input("Target Points (TP1)", value=30)
 trailing_fixed = 10 
 
-if st.button("🚀 'नो लॉस' अल्गो ट्रेड ट्रिगर करा", use_container_width=True):
+if st.button("🚀 'नो लॉस' अल्गो ट्रेड TRIGER करा", use_container_width=True):
     res = broker.place_fast_trailing_order(symbol_input, "BUY", qty, entry_price, market_sl, target_val, trailing_fixed)
     
     if res.get("status"):
@@ -85,7 +119,6 @@ if st.button("🚀 'नो लॉस' अल्गो ट्रेड ट्र�
         
         pnl_ref.update({"daily_pnl": daily_pnl + gross_trade_pnl, "total_brokerage": total_brokerage + trade_brokerage})
         
-        # लाईनशीर सविस्तर टेलिग्राम 'नो लॉस' रिपोर्ट
         report = (
             f"🛡️ *[SAFE ALGO BOT - NO LOSS PROTECTED]*\n"
             f"-------------------------------------\n"
