@@ -8,3 +8,5 @@ websocket-client
 logzero
 firebase-admin
 streamlit
+apscheduler
+
