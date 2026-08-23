@@ -6,4 +6,4 @@ pandas
 gunicorn
 websocket-client
 logzero
-
+firebase-admin
