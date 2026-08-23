@@ -5,25 +5,6 @@ import broker
 import os
 import datetime
 import pandas as pd
-from apscheduler.schedulers.background import BackgroundScheduler
-
-# --- ⏰ टाइम शेड्युलर लॉजिक ---
-def morning_wish():
-    print("🌄 शुभ सकाळ, प्रमोद भाऊ आणि कामगार बांधवांनो!")
-
-def auto_start_bot():
-    try:
-        db = firestore.client()
-        broker.db = db
-        session = broker.get_smart_api_session()
-    except Exception: pass
-
-if "scheduler_started" not in st.session_state:
-    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
-    scheduler.add_job(morning_wish, 'cron', hour=9, minute=0)
-    scheduler.add_job(auto_start_bot, 'cron', hour=9, minute=16)
-    scheduler.start()
-    st.session_state.scheduler_started = True
 
 # --- ⚙️ फायरबेस कनेक्शन ---
 db = None
@@ -37,25 +18,24 @@ if not firebase_admin._apps:
             firebase_admin.initialize_app()
             db = firestore.client()
     except Exception as e:
-        st.error(f"फायरबेस कनेक्शन एरर: {e}")
+        st.error(f"फायरबेस एरर: {e}")
 else:
     db = firestore.client()
 
 broker.db = db
 
 # --- डॅशबोर्ड स्क्रीनची सुरुवात ---
-st.set_page_config(page_title="SafeAlgoBot No Loss", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title="SafeAlgoBot Trailing Pro", page_icon="🛡️", layout="centered")
 st.title("🛡️ SafeAlgoBot - 'नो लॉस' कामगार विशेष")
 
 if db is None:
     st.error("❌ फायरबेस डेटाबेसशी कनेक्शन होऊ शकले नाही!")
     st.stop()
 
-# --- 📊 P&L डॅशボード (स्लो सिस्टीम फिक्स लॉजिक) ---
+# --- 📊 P&L डेटा लोड लॉजिक ---
 pnl_ref = db.collection('pnl_tracker').document('user_01')
 pnl_doc = pnl_ref.get()
 
-# 🎯 जर डेटाबेसमध्ये अजून कप्पा नसेल तर तो जागच्या जागी तयार करणे (ॲप फास्ट चालण्यासाठी)
 if not pnl_doc.exists:
     pnl_data = {"daily_pnl": 0.0, "weekly_pnl": 0.0, "total_brokerage": 0.0}
     pnl_ref.set(pnl_data)
@@ -74,8 +54,25 @@ with col3: st.metric(label="💰 हातात येणारा नफा (N
 
 st.divider()
 
+# --- 📡 ट्रेडिंगव्ह्यू सिग्नल इनपुट (Webhook Backend Bypass) ---
+st.write("### ⚠️ चार्ट इंडिकेटर लाइव्ह स्टेटस")
+# हा भाग ट्रेडिंगव्ह्यू कडून येणारा लाईव्ह सिग्नल रिसिव्ह करतो
+query_params = st.query_params
+if "signal" in query_params:
+    tv_signal = query_params["signal"]
+    tv_symbol = query_params.get("symbol", "NIFTY")
+    st.success(f"🔔 [TradingView Signal Recieved]: {tv_symbol} -> {tv_signal}")
+    
+    # ऑटो-ट्रेड ट्रिगर लॉजिक
+    if tv_signal in ["BUY", "SELL"]:
+        broker.place_fast_trailing_order(tv_symbol, tv_signal, 25, 100.0, 80.0, 30, 10)
+else:
+    st.info("⏳ ट्रेडिंगव्ह्यू चार्ट कडून सिग्नलची वाट पाहत आहे... सिस्टीम रेडी आहे!")
+
+st.divider()
+
 # --- 📂 इनपुट पॅनेल ---
-st.write("### ⚙️ 'No Loss' फास्ट ट्रेलिंग सेटिंग्स")
+st.write("### ⚙️ 'No Loss' मॅन्युअल बॅकअप सेटिंग्स")
 asset_type = st.selectbox("ट्रेडिंग प्रकार:", ["STOCKS (शेअर्स) 🛡️", "NIFTY / BANKNIFTY", "FINNIFTY"])
 symbol_input = st.text_input("सिम्बॉल नाव:", "TATASTEEL" if "STOCKS" in asset_type else "NIFTY24SEP24500CE")
 qty = st.number_input("क्वांटिटी संख्या:", value=10 if "STOCKS" in asset_type else 25)
@@ -91,27 +88,8 @@ trailing_fixed = 10
 
 if st.button("🚀 'नो लॉस' अल्गो ट्रेड TRIGER करा", use_container_width=True):
     res = broker.place_fast_trailing_order(symbol_input, "BUY", qty, entry_price, market_sl, target_val, trailing_fixed)
-    
     if res.get("status"):
         st.success("ऑर्डर यशस्वी!")
-        calculated_sl_pts = res.get("calculated_sl")
-        exit_price = entry_price + target_val
-        gross_trade_pnl = float(target_val * qty)
-        trade_brokerage = 15.0 if "STOCKS" in asset_type else 45.0
-        
-        # हिस्टरी सेव्ह
-        db.collection('trade_history').add({
-            "timestamp": firestore.SERVER_TIMESTAMP,
-            "time": datetime.datetime.now().strftime("%I:%M %p"),
-            "symbol": symbol_input.upper(),
-            "type": f"🎯 {asset_type} BUY",
-            "entry": entry_price,
-            "exit": exit_price,
-            "brokerage": trade_brokerage,
-            "net_pnl": gross_trade_pnl - trade_brokerage
-        })
-        
-        pnl_ref.update({"daily_pnl": daily_pnl + gross_trade_pnl, "total_brokerage": total_brokerage + trade_brokerage})
         st.rerun()
     else:
         st.error(f"फेल: {res.get('message')}")
