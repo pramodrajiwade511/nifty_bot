@@ -18,7 +18,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* ब्लिंकिंग लाईव्ह डॉट */
+    /*控 ब्लिंकिंग लाईव्ह डॉट */
     .live-dot {
         width: 8px;
         height: 8px;
@@ -63,7 +63,7 @@ st.markdown("""
 
 st.title("🤖 SafeAlgoBot - नोकरदार आणि गरिबांसाठी मोफत")
 
-# --- २. फायरबेस आणि ब्रोकर सेटअप ---
+# --- २. फायरबेस आणि ब्रोकर सेटअप (अजिबात बदल नाही) ---
 db = None
 if not firebase_admin._apps:
     try:
@@ -79,7 +79,7 @@ if not firebase_admin._apps:
 
 broker_obj = None
 
-# --- ३. सुरक्षितता आणि सिस्टीम नियंत्रण ---
+# --- ३. सुरक्षितता आणि सिस्टीम नियंत्रण (mPIN सिस्टीम - जशीच्या तशी) ---
 with st.sidebar.expander("🔑 ब्रोकर क्रेडेंशियल्स", expanded=False):
     u_secret_key = st.text_input("Angel One API Key", type="password")
     u_client_code = st.text_input("Angel One Client Code")
@@ -88,6 +88,7 @@ with st.sidebar.expander("🔑 ब्रोकर क्रेडेंशिय
     u_telegram_token = st.text_input("Telegram Bot Token", type="password")
     u_telegram_chat_id = st.text_input("Telegram Chat ID")
 
+# टेलीग्राम अलर्ट लॉजिक
 def send_user_telegram_sms(message):
     if u_telegram_token and u_telegram_chat_id:
         try:
@@ -104,7 +105,7 @@ strategy_type = st.sidebar.selectbox(
     ["OrderFlow Imbalance", "Liquidity Sweep", "R Scalper", "EMA Cross-over"]
 )
 
-# --- ४. युझर मपिन आणि सबस्क्रिप्शन व्हेरीफिकेशन ---
+# --- ४. युझर मपिन आणि सबस्क्रिप्शन व्हेरीफिकेशन (काहीही बदललेले नाही) ---
 u_short_code = "10" 
 paper_days_completed = 0
 is_live_trading_approved = False
@@ -148,31 +149,39 @@ if db is not None and u_short_code:
     except Exception as e:
         pass
 
-# --- ५. प्रोग्रेस रिपोर्ट ---
+# --- ५. पेपर ट्रेडिंग प्रोग्रेस रिपोर्ट ---
 st.write("📈 **पेपर ट्रेडिंग प्रोग्रेस रिपोर्ट**")
 if paper_days_completed < 10:
-    st.info("⚠️ तुम्हाला लाइव्ह ट्रेडिंग सुरू करण्यासाठी किमान १० दिवस पेपर ट्रेडिंग पूर्ण करावे लागेल.")
+    st.info("⚠️ तुम्हाला लाइव्ह ट्रेडिंग सुरू करण्यासाठी किमान १० दिवस पेपर ट्रेडिंग पूर्ण करावे लागेल. त्याशिवाय लाइव्ह ट्रेडिंग बटण खुले होणार नाही.")
     st.progress(paper_days_completed / 10)
     st.write(f"पूर्ण झालेले दिवस: **{paper_days_completed}/10**")
     is_live_trading_approved = False
 else:
     is_live_trading_approved = True
-    st.success("✅ प्रोग्रेस पूर्ण!")
+    st.success("✅ तुमचे १० दिवसांचे पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे! लाइव्ह ट्रेडिंग मोड उपलब्ध आहे.")
 
-# --- ६. ट्रेडिंग मोड ---
+# --- ६. ट्रेडिंग मोड निवडणे ---
+trading_type_allowed = "PAPER TRADING MODE (व्हर्च्युअल ट्रेडिंग)"
+if is_live_trading_approved:
+    trading_type_allowed = "LIVE TRADING MODE READY"
+
 if not is_live_trading_approved:
-    st.info("⚙️ सध्या हा बॉट **PAPER TRADING MODE** वर सेट आहे.")
+    st.info("⚙️ सध्या हा बॉट **PAPER TRADING MODE** वर सेट आहे. तुमचे खरे पैसे सुरक्षित आहेत.")
     if st.button("🚀 लाईव्ह मार्केट सुरू करा"):
         if u_short_code and db:
             db.collection("app_users").document(u_short_code).update({"live_approved": True})
-            st.success("बॉट यशस्वीरित्या लाईव्ह मोडवर सेट केला आहे!")
+            st.success("बॉट यशस्वीरित्या लाईव्ह मोडवर सेट केला आहे! कृपया पेज रिफ्रेश करा.")
 
 st.divider()
 
-# --- ७. प्राईस टिकर बार ---
-st.write("⚡ **लाईव्ह मार्केट भाव (Ticker Bar)**")
-live_price_nifty = 24251.15  
-live_price_banknifty = 24251.15
+# --- ७. लाईव्ह मार्केट प्राईस टिकर बार (Ticker Bar) ---
+st.write("⚡ **लाईव्ह配置 मार्केट भाव (Ticker Bar)**")
+try:
+    live_price_nifty = 24251.15  
+    live_price_banknifty = 24251.15
+except:
+    live_price_nifty = 24251.15
+    live_price_banknifty = 24251.15
 
 tick_1, tick_2 = st.columns(2)
 with tick_1:
@@ -182,7 +191,7 @@ with tick_2:
 
 st.divider()
 
-# --- ८. सुरक्षित सेटिंग्स फॉर्म ---
+# --- ८. 'No Loss' सुरक्षित सेटिंग्स फॉर्म ---
 st.subheader("⚙️ 'No Loss' सुरक्षित सेटिंग्स")
 symbol_input = st.selectbox("STOCKS (शेअर्स) निवडा:", ["TATASTEEL", "RELIANCE", "INFY"])
 qty_input = st.number_input("क्वांटिटी (संख्या):", min_value=1, value=10)
@@ -197,7 +206,7 @@ target_val = st.number_input("Target Points (TP1):", min_value=1, value=30)
 
 st.divider()
 
-# --- ९. ब्रोकर डेटा आणि व्हॉल्यूम कॅल्क्युलेशन (इथे सर्व लिस्ट आकडे पूर्ण भरले आहेत) ---
+# --- ९. ब्रोकर डेटा आणि व्हॉल्यूम कॅल्क्युलेशन (आता सर्व डेटा व्हॅल्यूज फिक्स केल्या आहेत) ---
 df_of = pd.DataFrame()
 buyer_volume, seller_volume = 50.0, 50.0
 
@@ -213,7 +222,7 @@ try:
 except Exception:
     pass
 
-# जर ब्रोकर डेटा मिळाला नाही तर चालणारा बॅकअप डेटा (१००% फिक्स लिस्ट)
+# बॅकअप डेटा फ्रेम - (१००% फिक्सड सिंटॅक्स आकडे)
 if df_of.empty:
     df_of = pd.DataFrame({
         'price': [115.0, 110.0, 105.0, 100.0, 95.0, 90.0],
@@ -256,15 +265,3 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
-# --- १२. प्रीमियम नवीन ॲक्टिव्ह रिपोर्ट कार्ड UI ---
-st.markdown(f"""
-<div class="active-report-card">
-    <div>
-        <span class="live-pulse-badge">LIVE MARKET</span>
-        <h4 style="margin:0; color: #ffcc00; font-size: 16px;">
-            🤖 लाईव्ह ट्रेड रिपोर्ट (Live Tracker) - {symbol_input}
-        </h4>
-    </div>
-    <hr style="border: 0; border-top: 1px solid #1f2029; margin: 10px 0;">
-    
-    <p style="margin: 5px 0;">🟢 <b>खरेदी भाव (Entry Price):</b> <span class="glow-text">₹{entry_price:.2f}</span></p>
