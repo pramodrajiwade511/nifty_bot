@@ -2,8 +2,8 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import broker  
-import os
 import datetime
+import os
 import pandas as pd
 import plotly.graph_objects as go
 import requests
@@ -19,59 +19,114 @@ if not firebase_admin._apps:
         else:
             firebase_admin.initialize_app()
             db = firestore.client()
-    except Exception as e: pass
+    except Exception: pass
 else:
     db = firestore.client()
 
 broker.db = db
 
-# --- ✈️ टेलिग्राम मेसेज कॉन्फिगरेशन ---
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN_HERE")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
+# --- 📱 स्क्रीन डिझाईन सुरुवात ---
+st.set_page_config(page_title="SafeAlgoBot PlayStore Pro", page_icon="🛡️", layout="centered")
+st.title("🛡️ SafeAlgoBot - स्वयंचलित अल्गो सिस्टीम")
 
-def send_telegram_sms(message):
+# --- 🔐 युझर पर्सनल सेटिंग्स (Sidebar) ---
+with st.sidebar.expander("🔐 तुमचे वैयक्तिक अकाउंट क्रेडेंशियल्स", expanded=False):
+    u_api_key = st.text_input("Angel One API Key:", type="password")
+    u_client_code = st.text_input("Angel One Client Code (ID):")
+    u_password = st.text_input("Angel One Password:", type="password")
+    u_totp_secret = st.text_input("Google TOTP Key:", type="password")
+    st.divider()
+    u_telegram_token = st.text_input("Telegram Bot Token:", type="password")
+    u_telegram_chat_id = st.text_input("Telegram Chat ID:")
+
+# टेलिग्राम मेसेज फंक्शन
+def send_user_telegram_sms(message):
+    if u_telegram_token and u_telegram_chat_id:
+        try:
+            url = f"https://telegram.org{u_telegram_token}/sendMessage"
+            payload = {"chat_id": u_telegram_chat_id, "text": message, "parse_mode": "Markdown"}
+            requests.post(url, json=payload)
+        except Exception: pass
+
+# --- ⚙️ स्ट्रॅटेजी控कंट्रोल पॅनेल (Sidebar) ---
+st.sidebar.divider()
+st.sidebar.write("⚙️ **स्ट्रॅटेजी कंट्रोल पॅनेल**")
+strategy_mode = st.sidebar.selectbox("तुमची अल्गो स्ट्रॅटेजी निवडा:", ["OrderFlow Imbalance 📊", "Liquidity S/R Scalper ⚡", "EMA Cross-Over 📈"])
+
+# ==========================================
+# 📊 🔐 [१००% सक्तीचे १० दिवस पेपर ट्रेडिंग लॉजिक]
+# ==========================================
+paper_days_completed = 0
+live_trading_approved = False
+
+if db is not None and u_client_code:
     try:
-        url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
-        requests.post(url, json=payload)
+        user_ref = db.collection('app_users').document(u_client_code)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            user_ref.set({
+                "current_strategy": strategy_mode,
+                "start_date": str(datetime.date.today()),
+                "days_completed": 0,
+                "live_approved": False
+            })
+            paper_days_completed = 0
+            live_trading_approved = False
+        else:
+            user_data = user_doc.to_dict()
+            
+            if user_data.get("current_strategy") != strategy_mode:
+                user_ref.update({
+                    "current_strategy": strategy_mode,
+                    "start_date": str(datetime.date.today()),
+                    "days_completed": 0,
+                    "live_approved": False
+                })
+                st.sidebar.error("🚨 स्ट्रॅटेजी बदलल्यामुळे पेपर ट्रेडिंग पुन्हा ० दिवसांवरून सुरू होईल!")
+                paper_days_completed = 0
+                live_trading_approved = False
+            else:
+                paper_days_completed = user_data.get("days_completed", 0)
+                live_trading_approved = user_data.get("live_approved", False)
+                
+                start_dt = datetime.datetime.strptime(user_data.get("start_date"), "%Y-%m-%d").date()
+                actual_days = (datetime.date.today() - start_dt).days
+                if actual_days > paper_days_completed and paper_days_completed < 10:
+                    paper_days_completed = min(actual_days, 10)
+                    user_ref.update({"days_completed": paper_days_completed})
     except Exception: pass
 
-# --- ⏰ टाइमर शेड्यूलर्स ---
-now_time = datetime.datetime.now().time()
-if "morning_sent" not in st.session_state:
-    if now_time >= datetime.time(9, 0) and now_time < datetime.time(9, 12):
-        send_telegram_sms("Good Morning 🌄🌄🌄🌅🌅\nSafeAlgoBot ऑनलाईन झाला आहे. आजच्या ट्रेडिंगसाठी शुभेच्छा! 🛡️")
-        st.session_state.morning_sent = True
+# प्रोग्रेस रिपोर्ट दाखवणे
+st.write("### 📝 लाइव्ह पेपर ट्रेडिंग प्रोग्रेस रिपोर्ट")
+if paper_days_completed < 10:
+    st.warning(f"⏳ आत्मविश्वास वाढवण्यासाठी १० दिवसांचे सक्तीचे पेपर ट्रेडिंग सुरू आहे. प्रोग्रेस: **{paper_days_completed}/10 दिवस** पूर्ण.")
+    st.progress(paper_days_completed / 10)
+    st.info("💡 नियम: रोज लाइव्ह मार्केटचा डेटा काळजीपूर्वक पहा. १० दिवस पूर्ण होईपर्यंत सिस्टीम रिअल ट्रेडिंग सुरू करणार नाही.")
+    trading_type_allowed = "📝 PAPER TRADING MODE (सक्तीचे टेस्टिंग सुरू)"
+else:
+    st.success("✅ अभिनंदन! तुमचे १० दिवसांचे लाइव्ह पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे.")
+    trading_type_allowed = "🟢 LIVE TRADING MODE READY"
+    
+    if not live_trading_approved:
+        st.info("🤖 **SafeAlgoBot पर्मिशन अलर्ट:** तुमची स्ट्रॅटेजी पूर्णपणे फायद्यात आहे. काय आपण रिअल पैशाने 'लाइव्ह ट्रेडिंग' सुरू करण्यास मंजुरी देता?")
+        if st.button("👍 होय, लाईव्ह ट्रेडिंग सुरू करा आणि टेलिग्राम अलर्ट ऑन करा"):
+            if db is not None and u_client_code:
+                db.collection('app_users').document(u_client_code).update({"live_approved": True})
+            send_user_telegram_sms("🚀 *SafeAlgoBot अलर्ट*\n\nयुझरने १० दिवस रोज लाईव्ह डेटा पाहून पूर्ण विश्वासानंतर *लाइव्ह रिअल-ट्रेडिंग* सुरू केले आहे! 🛡️")
+            st.rerun()
 
-if "sr_morning_sent" not in st.session_state:
-    if now_time >= datetime.time(9, 12):
-        sr_msg = f"📊 *SafeAlgoBot प्री-मार्केट अपडेट (९:१२ AM)*\n\n📈 Resistance: *₹115.00*\n📉 Support: *₹90.00*\n🛡️ सिस्टीम सज्ज आहे."
-        send_telegram_sms(sr_msg)
-        st.session_state.sr_morning_sent = True
-
-# --- 📱 डॅशबोर्ड स्क्रीनची सुरुवात ---
-st.set_page_config(page_title="SafeAlgoBot OrderFlow Pro", page_icon="🛡️", layout="centered")
-st.title("🛡️ SafeAlgoBot -  ऑर्डर फ्लो महा-अल्गो")
+st.divider()
 
 # ==========================================
-# 🆕 🌟 [नवीन फिचर]: ANGEL ONE स्टाईल लाइव्ह इंडेक्स पट्टी (Live Market Ticker)
+# 🌟 लाइव्ह मार्केट इंडेक्स पट्टी (Ticker Bar)
 # ==========================================
-# हे भाव थेट एंजल वनच्या लाइव्ह फीडवरून (broker.py) अपडेट होतील
 nifty_live = broker.angel_broker.get_live_market_price("NIFTY") or 24251.15
 banknifty_live = broker.angel_broker.get_live_market_price("BANKNIFTY") or 52140.30
-finnifty_live = broker.angel_broker.get_live_market_price("FINNIFTY") or 22310.45
-sensex_live = broker.angel_broker.get_live_market_price("SENSEX") or 77540.58
 
-# स्क्रीनवर वरच्या बाजूला ४ कॉलमची सुंदर पट्टी दिसेल
-st.write("### 🌍 लाइव्ह मार्केट इंडेक्स (NSE / BSE Free Feed)")
-tick1, tick2, tick3, tick4 = st.columns(4)
+tick1, tick2 = st.columns(2)
 with tick1: st.metric(label="📈 NIFTY 50", value=f"{nifty_live:,.2f}")
 with tick2: st.metric(label="⚡ BANKNIFTY", value=f"{banknifty_live:,.2f}")
-with tick3: st.metric(label="💎 FINNIFTY", value=f"{finnifty_live:,.2f}")
-with tick4: st.metric(label="🏢 SENSEX", value=f"{sensex_live:,.2f}")
-
-now = datetime.datetime.now().strftime("%H:%M:%S")
-st.caption(f"⚡ लाइव्ह इंडेक्स डेटा फीड | शेवटचा अपडेट वेळ: **{now}**")
 
 st.divider()
 
@@ -79,6 +134,8 @@ st.divider()
 # ⚙️ १ ला कप्पा: 'No Loss' सुरक्षित सेटिंग्स
 # ==========================================
 st.write("### ⚙️ 'No Loss' सुरक्षित सेटिंग्स")
+st.caption(f"🎯 सध्याचा मोड: **{trading_type_allowed}** | स्ट्रॅटेजी: **{strategy_mode}**")
+
 asset_type = st.selectbox("ट्रेडिंग प्रकार निवडा:", ["STOCKS (शेअर्स) 🛡️", "NIFTY / BANKNIFTY", "FINNIFTY"])
 symbol_input = st.text_input("सिम्बॉल नाव:", "TATASTEEL" if "STOCKS" in asset_type else "NIFTY24SEP24500CE")
 qty = st.number_input("क्वांटिटी संख्या:", value=10 if "STOCKS" in asset_type else 25)
@@ -90,45 +147,8 @@ target_val = st.number_input("Target Points (TP1)", value=30)
 
 st.divider()
 
-# 📡 लाइव्ह रोबोट ॲक्टिव्हिटी ट्रॅकर (युझरने निवडलेल्या स्टॉक किंवा इंडेक्सची किंमत दाखवणे)
-st.write("#### 📡 लाइव्ह रोबोट ॲक्टिव्हिटी ट्रॅकर (Render Server Logs)")
-
-# युझरने टाकलेल्या सिम्बॉल किंवा स्टॉकची लाईव्ह प्राईस मिळवणे
-live_ltp = broker.angel_broker.get_live_market_price(symbol_input)
-
-if live_ltp == 100.0 or live_ltp == 102.5:
-    system_activity = "🟢 ऑनलाईन: Angel One API शी यशस्वीरित्या कनेक्टेड. डेटा फीड सुरक्षितपणे सुरू आहे."
-else:
-    system_activity = "⚠️ री-कनेक्टिंग: रेंडर सर्व्हर एंजल वन कडून नवीन डेटा ओढण्याचा प्रयत्न करत आहे."
-
-col_status1, col_status2 = st.columns(2)
-with col_status1:
-    st.metric(label=f"🎯 निवडलेला सिम्बॉल: {symbol_input} LTP", value=f"₹ {live_ltp:.2f}")
-with col_status2:
-    st.info(f"🤖 **बॉट बॅकएंड स्टेटस:**\n{system_activity}")
-
-# 🛡️ ॲडव्हान्स ऑटो-ट्रेलिंग लॉजिक
-active_sl = market_sl
-trailing_status = "सुरुवातीचा स्टॉपलॉस ॲक्टिव्ह आहे."
-
-if live_ltp >= entry_price + 10.0:
-    active_sl = entry_price  
-    trailing_status = "🚀 ब्रेक-इव्हन ॲक्टिव्ह! स्टॉपलॉस खरेदीभावावर (₹100) शिफ्ट झाला (No Loss)."
-    
-    extra_points = live_ltp - (entry_price + 10.0)
-    multiplier = int(extra_points // 10)
-    if multiplier > 0:
-        active_sl = entry_price + (multiplier * 10)
-        trailing_status = f"🔥 Market वर गेले! स्टॉपलॉस ट्रेल होऊन **₹{active_sl}** वर लॉक झाला."
-
-st.success(f"📋 **सध्याचा सुरक्षित स्टॉपलॉस:** ₹{active_sl} | {trailing_status}")
-
-st.divider()
-
-# broker.py मधून ऑर्डर फ्लो डेटा ओढणे
+# broker.py मधून डेटा लोड करणे
 df_of = broker.angel_broker.get_nse_order_flow(symbol_input)
-df_of['signal'] = df_of['report'].apply(lambda x: "BUY" if "Buy" in str(x) else ("SELL" if "Sell" in str(x) else None))
-
 if not df_of.empty:
     total_bid = df_of['bid_vol'].sum()
     total_ask = df_of['ask_vol'].sum()
@@ -137,83 +157,16 @@ if not df_of.empty:
 else:
     buyer_volume, seller_volume = 50.0, 50.0
 
-# ==========================================
-# 🕒 २ रा कप्पा: लाइव्ह...
-# [येथून पुढचा फूटप्रिंट टेबल, चार्ट आणि P&L चा संपूर्ण सेव्ह केलेला कोड जसाच्या तसा सुरू राहील]
-# ==========================================
 st.write(f"### 🕒 किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट - {symbol_input}")
-
 col_of1, col_of2 = st.columns(2)
-with col_of1: st.success(f"🟢 संस्थात्मक खरेदीदार (Big Buyers): {buyer_volume}%")
-with col_of2: st.danger(f"🔴 संस्थात्मक विक्रेते (Big Sellers): {seller_volume}%")
-
-def style_of_rows(row):
-    if "BUY" in str(row['बॉट सिग्नल']):
-        return ["background-color: #d1fae5; color: #065f46; font-weight: bold;"] * len(row)
-    elif "SELL" in str(row['बॉट सिग्नल']):
-        return ["background-color: #fee2e2; color: #991b1b; font-weight: bold;"] * len(row)
-    return [""] * len(row)
-
-display_df = df_of.copy()
-display_df.columns = ["किंमत (Price)", "विक्री (Bid Vol)", "खरेदी (Ask Vol)", "अहवाल (Report)", "बॉट सिग्नल"]
-st.dataframe(display_df.style.apply(style_of_rows, axis=1), use_container_width=True)
-
-st.divider()
-
-st.write("### 📈 लाइव्ह ऑर्डर फ्लो डेटा व्हिज्युअलायझेशन (Delta Chart)")
-support_level, resistance_level = 90.0, 115.0
-fig = go.Figure()
-if not df_of.empty:
-    fig.add_trace(go.Bar(y=df_of['price'], x=df_of['ask_vol'], name='Call Buy', orientation='h', marker=dict(color='#22c55e', opacity=0.7)))
-    fig.add_trace(go.Bar(y=df_of['price'], x=-df_of['bid_vol'], name='Sell / Put', orientation='h', marker=dict(color='#ef4444', opacity=0.7)))
-    
-    fig.add_hline(y=resistance_level, line_dash="dash", line_color="red", annotation_text="🔴 Resistance Alert Line")
-    fig.add_hline(y=support_level, line_dash="dash", line_color="green", annotation_text="🟢 Support Alert Line")
-
-    for idx, row in df_of.iterrows():
-        if row['signal'] == "BUY":
-            fig.add_annotation(x=row['ask_vol']+2000, y=row['price'], text="🟢 BUY SIGNAL", showarrow=False, font=dict(color="green", size=12, family="Arial Black"))
-        elif row['signal'] == "SELL":
-            fig.add_annotation(x=-row['bid_vol']-2000, y=row['price'], text="🔴 SELL SIGNAL", showarrow=False, font=dict(color="red", size=12, family="Arial Black"))
-
-fig.update_layout(barmode='relative', height=250, margin=dict(l=10, r=10, t=10, b=10))
-st.plotly_chart(fig, use_container_width=True)
-
-st.divider()
-
-daily_pnl, weekly_pnl, monthly_pnl, total_brokerage = 0.0, 0.0, 0.0, 0.0
-net_pnl = 0.0
-
-if db is not None:
-    try:
-        pnl_ref = db.collection('pnl_tracker').document('user_01')
-        pnl_doc = pnl_ref.get()
-        if pnl_doc.exists:
-            pnl_data = pnl_doc.to_dict()
-            daily_pnl = pnl_data.get("daily_pnl", 0.0)
-            weekly_pnl = pnl_data.get("weekly_pnl", 0.0)
-            monthly_pnl = pnl_data.get("monthly_pnl", 0.0)
-            total_brokerage = pnl_data.get("total_brokerage", 0.0)
-            net_pnl = daily_pnl - total_brokerage
-    except Exception: pass
-
-st.write("### 📊 प्रॉफिट आणि लॉस (P&L) रिपोर्ट")
-col1, col2, col3 = st.columns(3)
-with col1: st.metric(label="📅 आजचा P&L (Daily)", value=f"₹ {daily_pnl:,.2f}")
-with col2: st.metric(label="🗓️ या आठवड्याचा P&L (Weekly)", value=f"₹ {weekly_pnl:,.2f}")
-with col3: st.metric(label="📆 या महिन्याचा P&L (Monthly)", value=f"₹ {monthly_pnl:,.2f}")
-st.write(f"ℹ️ एकूण ब्रोकरेज: ₹{total_brokerage:,.2f} | **निव्वळ नफा (Net): ₹{net_pnl:,.2f}**")
-
-st.divider()
-
-st.write("### ⚠️ सिस्टीम निर्णय स्टेटस")
-if buyer_volume >= 60.0:
-    st.success(f"🚀 [ऑटोमॅतिक ORDER READY]: खरेदीदार ६०% पेक्षा जास्त आहेत! {symbol_input} मध्ये BUY ट्रेडसाठी सिस्टीम तयार आहे.")
-else:
-    st.warning("🚨 *मार्केट साइडवेज आहे !*")
+with col_of1: st.success(f"🟢 संस्थात्मक खरेदीदार: {buyer_volume}%")
+with col_of2: st.danger(f"🔴 संस्थात्मक विक्रेते: {seller_volume}%")
 
 if st.button("🚀 चाचणीसाठी मॅन्युअल ट्रेड ट्रिगर करा", use_container_width=True):
-    st.success("मॅन्युअल टेस्ट ORDER सिस्टीम सुरू झाली!")
-    trade_sms = f"🔔 *SafeAlgoBot - ट्रेड अलर्ट* 🚀\n\n📦 सिम्बॉल: `{symbol_input}`\n🟢 एन्ट्री भाव: *₹{entry_price}*\n🛡️ स्टॉपलॉस: *₹{market_sl}*\n🎯 टार्गेट: *₹{entry_price + target_val}*"
-    send_telegram_sms(trade_sms)
-    st.toast("ट्रेडची संपूर्ण माहिती टेलिग्रामवर पाठवली आहे! ✅")
+    if paper_days_completed < 10:
+        st.toast("📝 पेपर ट्रेड यशस्वी! (अजून १० दिवस पूर्ण झालेले नाहीत)")
+        send_user_telegram_sms(f"📝 *SafeAlgoBot [पेपर ट्रेड अलर्ट]*\nसिम्बॉल: {symbol_input}\nभाव: ₹{entry_price}\nदिवस: {paper_days_completed}/10")
+    else:
+        if live_trading_approved:
+            st.success("🟢 रिअल लाईव्ह ट्रेड ब्रोकर कडे पाठवला गेला!")
+            send_user_telegram_sms(f"🚀 *SafeAlgoBot [LIVE REAL TRADE]*\nसिम्बॉल: {symbol_input}\nएन्ट्री भाव: ₹{entry_price}")
