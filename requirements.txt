@@ -3,3 +3,5 @@ firebase-admin
 smartapi-python
 pyotp
 plotly
+logzero
+websocket-client
