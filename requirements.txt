@@ -1,5 +1,5 @@
 streamlit
-pyotp
-pandas
 firebase-admin
-
+smartapi-python
+pyotp
+plotly
