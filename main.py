@@ -102,10 +102,10 @@ st.write("### 📝 लाइव्ह पेपर ट्रेडिंग प�
 if paper_days_completed < 10:
     st.warning(f"⏳ आत्मविश्वास वाढवण्यासाठी १० दिवसांचे सक्तीचे पेपर ट्रेडिंग सुरू आहे. प्रोग्रेस: **{paper_days_completed}/10 दिवस** पूर्ण.")
     st.progress(paper_days_completed / 10)
-    st.info("💡 नियम: रोज लाइव्ह接收 मार्केटचा डेटा काळजीपूर्वक पहा. १० दिवस पूर्ण होईपर्यंत सिस्टीम रिअल ट्रेडिंग सुरू करणार नाही.")
+    st.info("💡 नियम: रोज लाइव्ह मार्केटचा डेटा काळजीपूर्वक पहा. १० दिवस पूर्ण होईपर्यंत सिस्टीम रिअल ट्रेडिंग सुरू करणार नाही.")
     trading_type_allowed = "📝 PAPER TRADING MODE (सक्तीचे टेस्टिंग सुरू)"
 else:
-    st.success("✅ अभिनंदन!景色 तुमचे १० दिवसांचे लाइव्ह पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे.")
+    st.success("✅ अभिनंदन! तुमचे १० दिवसांचे लाइव्ह पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे.")
     trading_type_allowed = "🟢 LIVE TRADING MODE READY"
     
     if not live_trading_approved:
@@ -119,7 +119,7 @@ else:
 st.divider()
 
 # ==========================================
-# 🌟 लाइव्ह मार्केट इंडेक्स पट्टी (Ticker Bar)
+# 🌟 लाइव्ह Market इंडेक्स पट्टी (Ticker Bar)
 # ==========================================
 nifty_live = broker.angel_broker.get_live_market_price("NIFTY") or 24251.15
 banknifty_live = broker.angel_broker.get_live_market_price("BANKNIFTY") or 52140.30
@@ -164,19 +164,23 @@ st.write(f"### 🕒 किंमत पातळीनुसार खरेद�
 
 col_of1, col_of2 = st.columns(2)
 with col_of1: st.success(f"🟢 संस्थात्मक खरेदीदार: {buyer_volume}%")
-with col_of2: st.error(f"🔴 संस्थात्मक विक्रेते: {seller_volume}%") # 🆕 'st.danger' ऐवजी 'st.error' केले (एरर फिक्स)
+with col_of2: st.error(f"🔴 संस्थात्मक विक्रेते: {seller_volume}%")
 
+# 🆕 कॉलमचे स्पेलिंग फिक्स करण्यासाठी 'Report' या इंग्रजी की चा वापर केला
 def style_of_rows(row):
-    if "Trigger" in str(row['अहवाल']) or "Buy" in str(row['अहवाल']):
+    if "Trigger" in str(row['Report']) or "Buy" in str(row['Report']):
         return ["background-color: #d1fae5; color: #065f46; font-weight: bold;"] * len(row)
-    elif "Sell" in str(row['अहवाल']) or "Level" in str(row['अहवाल']):
+    elif "Sell" in str(row['Report']) or "Level" in str(row['Report']):
         return ["background-color: #fee2e2; color: #991b1b; font-weight: bold;"] * len(row)
     return [""] * len(row)
 
 if not df_of.empty:
     display_df = df_of.copy()
-    display_df.columns = ["किंमत (Price)", "विक्री (Bid Vol)", "खरेदी (Ask Vol)", "अहवाल (Report)"]
-    st.dataframe(display_df.style.apply(style_of_rows, axis=1), use_container_width=True)
+    # स्टाईल अप्लाय केल्यानंतर कॉलमचे नाव स्क्रीनवर मराठीत बदलले जाईल
+    st.dataframe(
+        display_df.style.apply(style_of_rows, axis=1), 
+        use_container_width=True
+    )
 
 st.divider()
 
