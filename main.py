@@ -18,7 +18,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /*控 ब्लिंकिंग लाईव्ह डॉट */
+    /* ब्लिंकिंग लाईव्ह डॉट */
     .live-dot {
         width: 8px;
         height: 8px;
@@ -148,7 +148,7 @@ if paper_days_completed < 10:
     is_live_trading_approved = False
 else:
     is_live_trading_approved = True
-    st.success("✅ तुमचे १० दिवसांचे पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे! लाइव्ह ट्रेडिंग मोड उपलब्ध आहे.")
+    st.success("✅ वर्षे १० दिवसांचे पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे! लाइव्ह ट्रेडिंग मोड उपलब्ध आहे.")
 
 # --- ६. ट्रेडिंग मोड निवडणे (काहीही बदललेले नाही) ---
 trading_type_allowed = "PAPER TRADING MODE (व्हर्च्युअल ट्रेडिंग)"
@@ -157,14 +157,14 @@ if is_live_trading_approved:
 
 if not is_live_trading_approved:
     st.info("⚙️ सध्या हा बॉट **PAPER TRADING MODE** वर सेट आहे. तुमचे खरे पैसे सुरक्षित आहेत.")
-    if st.button("🚀 लाईव्ह配置 मार्केट सुरू करा"):
+    if st.button("🚀 लाईव्ह मार्केट सुरू करा"):
         if u_short_code and db:
             db.collection("app_users").document(u_short_code).update({"live_approved": True})
             st.success("बॉट यशस्वीरित्या लाईव्ह मोडवर सेट केला आहे! कृपया पेज रिफ्रेश करा.")
 
 st.divider()
 
-# --- ७. लाईव्ह मार्केट प्राईस टिकर बार (Ticker Bar) ---
+# --- ७. लाईव्ह配置 मार्केट प्राईस टिकर बार (Ticker Bar) ---
 st.write("⚡ **लाईव्ह मार्केट भाव (Ticker Bar)**")
 try:
     live_price_nifty = 24251.15  
@@ -191,7 +191,7 @@ target_val = st.number_input("Target Points (TP1):", min_value=1, value=30)
 
 st.divider()
 
-# --- ९. किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट (Fixed Syntax) ---
+# --- ९. किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट (डेटा व्हॅल्यूज फिक्स केल्या आहेत) ---
 st.markdown(f'<h3><span class="live-dot"></span> 📊 किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट - {symbol_input}</h3>', unsafe_allow_html=True)
 
 df_of = pd.DataFrame({
@@ -236,7 +236,7 @@ st.markdown(f"""
     
     <hr style="border: 0; border-top: 1px solid #1f2029; margin: 10px 0;">
     <p style="margin: 0; font-size: 12px; color: #888; text-align: center;">
-        बॉट सध्या लाईव्ह配置 मार्केटच्या किंमती ट्रॅक करत आहे...
+        बॉट सध्या लाईव्ह मार्केटच्या किंमती ट्रॅक करत आहे...
     </p>
 </div>
 """, unsafe_allow_html=True)
