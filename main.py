@@ -50,7 +50,7 @@ def send_user_telegram_sms(message):
 
 # --- ⚙️ स्ट्रॅटेजी कंट्रोल पॅनेल (Sidebar) ---
 st.sidebar.divider()
-st.sidebar.write("⚙️ **स्ट्रॅटेजी कंट्रोल पॅनेल**")
+st.sidebar.write("⚙️ **स्ट्रॅटेजी CONTROL पॅनेल**")
 strategy_mode = st.sidebar.selectbox("तुमची अल्गो स्ट्रॅटेजी निवडा:", ["OrderFlow Imbalance 📊", "Liquidity S/R Scalper ⚡", "EMA Cross-Over 📈"])
 
 # ==========================================
@@ -119,7 +119,7 @@ else:
 st.divider()
 
 # ==========================================
-# 🌟 लाइव्ह Market इंडेक्स पट्टी (Ticker Bar)
+# 🌟 लाइव्ह मार्केट इंडेक्स पट्टी (Ticker Bar)
 # ==========================================
 nifty_live = broker.angel_broker.get_live_market_price("NIFTY") or 24251.15
 banknifty_live = broker.angel_broker.get_live_market_price("BANKNIFTY") or 52140.30
@@ -166,17 +166,16 @@ col_of1, col_of2 = st.columns(2)
 with col_of1: st.success(f"🟢 संस्थात्मक खरेदीदार: {buyer_volume}%")
 with col_of2: st.error(f"🔴 संस्थात्मक विक्रेते: {seller_volume}%")
 
-# 🆕 कॉलमचे स्पेलिंग फिक्स करण्यासाठी 'Report' या इंग्रजी की चा वापर केला
+# 🆕 🌟 [बदल फिक्स केला]: 'report' शब्दाचे स्पेलिंग लिटल केस (lowercase) केले
 def style_of_rows(row):
-    if "Trigger" in str(row['Report']) or "Buy" in str(row['Report']):
+    if "Trigger" in str(row['report']) or "Buy" in str(row['report']):
         return ["background-color: #d1fae5; color: #065f46; font-weight: bold;"] * len(row)
-    elif "Sell" in str(row['Report']) or "Level" in str(row['Report']):
+    elif "Sell" in str(row['report']) or "Level" in str(row['report']):
         return ["background-color: #fee2e2; color: #991b1b; font-weight: bold;"] * len(row)
     return [""] * len(row)
 
 if not df_of.empty:
     display_df = df_of.copy()
-    # स्टाईल अप्लाय केल्यानंतर कॉलमचे नाव स्क्रीनवर मराठीत बदलले जाईल
     st.dataframe(
         display_df.style.apply(style_of_rows, axis=1), 
         use_container_width=True
@@ -223,3 +222,4 @@ if db is not None:
 st.write("### 📊 प्रॉफिट आणि लॉस (P&L) रिपोर्ट")
 col1, col2, col3 = st.columns(3)
 with col1: st.metric(label="📅 आजचा P&L (Daily)", value=f"₹ {daily_pnl:,.2f}")
+with col2: st.metric(label="🗓️ या आठवड्याचा P&L (Weekly)", value=f"₹ {weekly_pnl:,.2f}")
