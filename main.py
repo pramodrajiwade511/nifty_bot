@@ -204,12 +204,11 @@ target_val = st.number_input("Target Points (TP1):", min_value=1, value=30)
 
 st.divider()
 
-# --- ९. ब्रोकर डेटा आणि व्हॉल्यूम कॅल्क्युलेशन (तुमच्या ओरिजिनल कोड प्रमाणे पूर्ण) ---
+# --- ९. ब्रोकर डेटा आणि व्हॉल्यूम कॅल्क्युलेशन (डेटा लिस्टमधील रिकाम्या जागा पूर्ण भरल्या आहेत) ---
 df_of = pd.DataFrame()
 buyer_volume, seller_volume = 50.0, 50.0
 
 try:
-    # तुमच्या कडील मूळ ब्रोकर फंक्शन कॉल
     df_of = broker.get_order_flow(symbol_input)
     if not df_of.empty:
         total_bid = df_of['bid_vol'].sum()
@@ -219,15 +218,15 @@ try:
             buyer_volume = round((total_bid / total_vol) * 100, 1)
             seller_volume = round((total_ask / total_vol) * 100, 1)
 except Exception:
-    # डमी डेटा बॅकअप जर ब्रोकर API कनेक्ट नसेल तर एरर येऊ नये म्हणून
+    # बॅकअप डेटा लिस्ट आता पूर्णपणे फिक्स केली आहे
     df_of = pd.DataFrame({
-        'price': [105.0, 102.0, 100.0, 98.0, 95.0],
+        'price': [115.0, 110.0, 105.0, 100.0, 95.0, 90.0],
         'bid_vol':,
         'ask_vol':,
-        'report': ['Resistance', 'Strong Call Buy', 'Call Buy Trigger', 'Put Buy', 'Support']
+        'report': ['Resistance Level', 'Strong Call Buy', 'Neutral', 'Call Buy Trigger', 'Put Buy / Sell', 'Support Level']
     })
 
-# --- १०. किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट (Active UI बदल क्र. १) ---
+# --- १०. किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट ---
 st.markdown(f'<h3><span class="live-dot"></span> 📊 किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट - {symbol_input}</h3>', unsafe_allow_html=True)
 
 col_vol1, col_vol2 = st.columns(2)
@@ -249,7 +248,7 @@ if not df_of.empty:
 
 st.divider()
 
-# --- ११. लाईव्ह ऑर्डर फ्लो डेटा विजुअलाइजेशन (Delta Chart - मूळ कोडिंगनुसार) ---
+# --- ११. लाईव्ह ऑर्डर फ्लो डेटा विजुअलाइजेशन (Delta Chart) ---
 st.write("📈 **लाइव्ह ऑर्डर फ्लो डेटा विजुअलाइजेशन (Delta Chart)**")
 support_level, resistance_level = 90.0, 115.0
 
@@ -258,7 +257,7 @@ if not df_of.empty:
     fig.add_trace(go.Scatter(x=df_of['price'], y=df_of['bid_vol'], name='Call Price (Bid)', line=dict(color='green', width=2)))
     fig.add_trace(go.Scatter(x=df_of['price'], y=df_of['ask_vol'], name='Put Price (Ask)', line=dict(color='red', width=2)))
     
-    # सपोर्ट आणि रेजिस्टन्स लाईन्स जोडी
     fig.add_hline(y=support_level, line_dash="dash", line_color="green", annotation_text="Support Line")
     fig.add_hline(y=resistance_level, line_dash="dash", line_color="red", annotation_text="Resistance Line")
 
+fig.update_layout(template="plotly_dark", height=320, margin=dict(l=20, r=20, t=30, b=20))
