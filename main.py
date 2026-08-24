@@ -48,7 +48,7 @@ def send_user_telegram_sms(message):
             requests.post(url, json=payload)
         except Exception: pass
 
-# --- ⚙️ स्ट्रॅटेजी控कंट्रोल पॅनेल (Sidebar) ---
+# --- ⚙️ स्ट्रॅटेजी कंट्रोल पॅनेल (Sidebar) ---
 st.sidebar.divider()
 st.sidebar.write("⚙️ **स्ट्रॅटेजी कंट्रोल पॅनेल**")
 strategy_mode = st.sidebar.selectbox("तुमची अल्गो स्ट्रॅटेजी निवडा:", ["OrderFlow Imbalance 📊", "Liquidity S/R Scalper ⚡", "EMA Cross-Over 📈"])
@@ -102,10 +102,10 @@ st.write("### 📝 लाइव्ह पेपर ट्रेडिंग प�
 if paper_days_completed < 10:
     st.warning(f"⏳ आत्मविश्वास वाढवण्यासाठी १० दिवसांचे सक्तीचे पेपर ट्रेडिंग सुरू आहे. प्रोग्रेस: **{paper_days_completed}/10 दिवस** पूर्ण.")
     st.progress(paper_days_completed / 10)
-    st.info("💡 नियम: रोज लाइव्ह मार्केटचा डेटा काळजीपूर्वक पहा. १० दिवस पूर्ण होईपर्यंत सिस्टीम रिअल ट्रेडिंग सुरू करणार नाही.")
+    st.info("💡 नियम: रोज लाइव्ह接收 मार्केटचा डेटा काळजीपूर्वक पहा. १० दिवस पूर्ण होईपर्यंत सिस्टीम रिअल ट्रेडिंग सुरू करणार नाही.")
     trading_type_allowed = "📝 PAPER TRADING MODE (सक्तीचे टेस्टिंग सुरू)"
 else:
-    st.success("✅ अभिनंदन! तुमचे १० दिवसांचे लाइव्ह पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे.")
+    st.success("✅ अभिनंदन!景色 तुमचे १० दिवसांचे लाइव्ह पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे.")
     trading_type_allowed = "🟢 LIVE TRADING MODE READY"
     
     if not live_trading_approved:
@@ -157,16 +157,65 @@ if not df_of.empty:
 else:
     buyer_volume, seller_volume = 50.0, 50.0
 
+# ==========================================
+# 🕒 २ रा कप्पा: लाइव्ह ऑर्डर फ्लो फूटप्रिंट टेबल
+# ==========================================
 st.write(f"### 🕒 किंमत पातळीनुसार खरेदी/विक्री रिपोर्ट - {symbol_input}")
+
 col_of1, col_of2 = st.columns(2)
 with col_of1: st.success(f"🟢 संस्थात्मक खरेदीदार: {buyer_volume}%")
-with col_of2: st.danger(f"🔴 संस्थात्मक विक्रेते: {seller_volume}%")
+with col_of2: st.error(f"🔴 संस्थात्मक विक्रेते: {seller_volume}%") # 🆕 'st.danger' ऐवजी 'st.error' केले (एरर फिक्स)
 
-if st.button("🚀 चाचणीसाठी मॅन्युअल ट्रेड ट्रिगर करा", use_container_width=True):
-    if paper_days_completed < 10:
-        st.toast("📝 पेपर ट्रेड यशस्वी! (अजून १० दिवस पूर्ण झालेले नाहीत)")
-        send_user_telegram_sms(f"📝 *SafeAlgoBot [पेपर ट्रेड अलर्ट]*\nसिम्बॉल: {symbol_input}\nभाव: ₹{entry_price}\nदिवस: {paper_days_completed}/10")
-    else:
-        if live_trading_approved:
-            st.success("🟢 रिअल लाईव्ह ट्रेड ब्रोकर कडे पाठवला गेला!")
-            send_user_telegram_sms(f"🚀 *SafeAlgoBot [LIVE REAL TRADE]*\nसिम्बॉल: {symbol_input}\nएन्ट्री भाव: ₹{entry_price}")
+def style_of_rows(row):
+    if "Trigger" in str(row['अहवाल']) or "Buy" in str(row['अहवाल']):
+        return ["background-color: #d1fae5; color: #065f46; font-weight: bold;"] * len(row)
+    elif "Sell" in str(row['अहवाल']) or "Level" in str(row['अहवाल']):
+        return ["background-color: #fee2e2; color: #991b1b; font-weight: bold;"] * len(row)
+    return [""] * len(row)
+
+if not df_of.empty:
+    display_df = df_of.copy()
+    display_df.columns = ["किंमत (Price)", "विक्री (Bid Vol)", "खरेदी (Ask Vol)", "अहवाल (Report)"]
+    st.dataframe(display_df.style.apply(style_of_rows, axis=1), use_container_width=True)
+
+st.divider()
+
+# ==========================================
+# 📈 ३ रा कप्पा: लाइव्ह ऑर्डर फ्लो चार्ट
+# ==========================================
+st.write("### 📈 लाइव्ह ऑर्डर फ्लो डेटा व्हिज्युअलायझेशन (Delta Chart)")
+support_level, resistance_level = 90.0, 115.0
+fig = go.Figure()
+if not df_of.empty:
+    fig.add_trace(go.Bar(y=df_of['price'], x=df_of['ask_vol'], name='Call Buy', orientation='h', marker=dict(color='#22c55e', opacity=0.7)))
+    fig.add_trace(go.Bar(y=df_of['price'], x=-df_of['bid_vol'], name='Sell / Put', orientation='h', marker=dict(color='#ef4444', opacity=0.7)))
+    fig.add_hline(y=resistance_level, line_dash="dash", line_color="red", annotation_text="🔴 Resistance Alert Line")
+    fig.add_hline(y=support_level, line_dash="dash", line_color="green", annotation_text="🟢 Support Alert Line")
+
+fig.update_layout(barmode='relative', height=250, margin=dict(l=10, r=10, t=10, b=10))
+st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+
+# ==========================================
+# 📊 ४ था कप्पा: प्रॉफिट आणि लॉस (P&L) रिपोर्ट
+# ==========================================
+daily_pnl, weekly_pnl, monthly_pnl, total_brokerage = 0.0, 0.0, 0.0, 0.0
+net_pnl = 0.0
+
+if db is not None:
+    try:
+        pnl_ref = db.collection('pnl_tracker').document('user_01')
+        pnl_doc = pnl_ref.get()
+        if pnl_doc.exists:
+            pnl_data = pnl_doc.to_dict()
+            daily_pnl = pnl_data.get("daily_pnl", 0.0)
+            weekly_pnl = pnl_data.get("weekly_pnl", 0.0)
+            monthly_pnl = pnl_data.get("monthly_pnl", 0.0)
+            total_brokerage = pnl_data.get("total_brokerage", 0.0)
+            net_pnl = daily_pnl - total_brokerage
+    except Exception: pass
+
+st.write("### 📊 प्रॉफिट आणि लॉस (P&L) रिपोर्ट")
+col1, col2, col3 = st.columns(3)
+with col1: st.metric(label="📅 आजचा P&L (Daily)", value=f"₹ {daily_pnl:,.2f}")
