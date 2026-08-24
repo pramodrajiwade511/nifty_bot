@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeAlgoBot Play...</title>
+    <!-- नवीन ॲक्टिव्ह आणि प्रीमियम लुकसाठी CSS स्टाईल्स -->
+    <style>
+        body {
+            background-color: #0c0d14;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 15px;
+        }
+        /* ब्लिंकिंग लाईव्ह डॉट */
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #00ff66;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            animation: blink 1.2s infinite ease-in-out;
+        }
+        @keyframes blink {
+            0% { opacity: 0.2; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.1); }
+            100% { opacity: 0.2; transform: scale(0.9); }
+        }
+        /* प्रीमियम ग्लोइंग रिपोर्ट कार्ड */
+        .active-report-card {
+            background: #11121a;
+            border: 1px solid #1f2029;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.08);
+            padding: 15px;
+            border-radius: 12px;
+            color: #fff;
+            margin-top: 20px;
+        }
+        .live-pulse-badge {
+            background: #ff3333;
+            color: white;
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        .glow-text {
+            color: #00ffcc;
+            text-shadow: 0 0 8px rgba(0, 255, 204, 0.5);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- इथे तुमचा मूळ डॅशबोर्डचा कोड चालू होईल (उदा. सेटिंग्स, टेबल इत्यादी) -->
+    
+    <!-- नवीन ॲक्टिव्ह रिपोर्ट जो आपण खाली जोडला आहे -->
+    <div class="active-report-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin:0; color: #ffcc00; font-size: 14px;">
+                <span class="live-dot"></span> 🤖 लाईव्ह ट्रेड रिपोर्ट (Live Tracker)
+            </h4>
+            <span class="live-pulse-badge">LIVE MARKET</span>
+        </div>
+        <hr style="border: 0; border-top: 1px solid #1f2029; margin: 10px 0;">
+        
+        <p>🟢 <b>खरेदी भाव (Entry Price):</b> <span class="glow-text">₹100.00</span></p>
+        <p>🔴 <b>स्टॉपलॉस भाव (Stop Loss):</b> <span style="color: #ff4444;">₹80.00</span></p>
+        <p>🎯 <b>अपेक्षित टार्गेट (Target Points):</b> <span style="color: #00ff66;">₹130.00</span></p>
+        
+        <hr style="border: 0; border-top: 1px solid #1f2029; margin: 10px 0;">
+        <p style="margin: 0; font-size: 12px; color: #888; text-align: center;">
+            बॉट सध्या लाईव्ह मार्केटच्या किंमती ट्रॅक करत आहे...
+        </p>
+    </div>
+
+</body>
+</html>
