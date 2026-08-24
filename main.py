@@ -156,7 +156,7 @@ if paper_days_completed < 10:
     is_live_trading_approved = False
 else:
     is_live_trading_approved = True
-    st.success("✅ तुमचे १० दिवसांचे पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे! लाइव्ह ट्रेडिंग मोड उपलब्ध आहे.")
+    st.success("✅  तुमचे १० दिवसांचे पेपर ट्रेडिंग यशस्वीरित्या पूर्ण झाले आहे! लाइव्ह ट्रेडिंग मोड उपलब्ध आहे.")
 
 # --- ६. ट्रेडिंग मोड निवडणे ---
 trading_type_allowed = "PAPER TRADING MODE (व्हर्च्युअल ट्रेडिंग)"
@@ -204,7 +204,7 @@ target_val = st.number_input("Target Points (TP1):", min_value=1, value=30)
 
 st.divider()
 
-# --- ९. ब्रोकर डेटा आणि व्हॉल्यूम कॅल्क्युलेशन (डेटा लिस्टमधील रिकाम्या जागा पूर्ण भरल्या आहेत) ---
+# --- ९. ब्रोकर डेटा आणि व्हॉल्यूम कॅल्क्युलेशन (आकडे पूर्ण भरले आहेत) ---
 df_of = pd.DataFrame()
 buyer_volume, seller_volume = 50.0, 50.0
 
@@ -218,7 +218,7 @@ try:
             buyer_volume = round((total_bid / total_vol) * 100, 1)
             seller_volume = round((total_ask / total_vol) * 100, 1)
 except Exception:
-    # बॅकअप डेटा लिस्ट आता पूर्णपणे फिक्स केली आहे
+    # बॅकअप डेटा लिस्ट - आता पूर्णपणे फिक्स केली आहे
     df_of = pd.DataFrame({
         'price': [115.0, 110.0, 105.0, 100.0, 95.0, 90.0],
         'bid_vol':,
@@ -261,3 +261,5 @@ if not df_of.empty:
     fig.add_hline(y=resistance_level, line_dash="dash", line_color="red", annotation_text="Resistance Line")
 
 fig.update_layout(template="plotly_dark", height=320, margin=dict(l=20, r=20, t=30, b=20))
+st.plotly_chart(fig, use_container_width=True)
+
