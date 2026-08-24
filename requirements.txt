@@ -1,3 +1,5 @@
 streamlit
 pyotp
 pandas
+firebase-admin
+
