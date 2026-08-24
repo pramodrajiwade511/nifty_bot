@@ -1,12 +1,4 @@
-flask
-requests
-pyotp
-smartapi-python
-pandas
-gunicorn
-websocket-client
-logzero
-firebase-admin
 streamlit
-apscheduler
-
+SmartApi
+pyotp
+pandas
