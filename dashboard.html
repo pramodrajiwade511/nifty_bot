@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal Desk</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0B1220">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B1220; --panel:#121B2E; --panel-2:#17233A; --line:#233150;
+    --paper:#E8EDF5; --muted:#8993A8; --rise:#2BB673; --fall:#E15554; --amber:#D8A448;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--ink); color:var(--paper);
+    font-family:'IBM Plex Sans',sans-serif; overscroll-behavior:none;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .serif{font-family:'IBM Plex Serif',serif;}
+
+  header{position:sticky; top:0; z-index:20; background:rgba(11,18,32,0.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:14px 18px; display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:22px; height:22px; position:relative;}
+  .brand-mark .wick{position:absolute; left:7px; top:0; width:2px; height:22px; background:var(--amber);}
+  .brand-mark .body{position:absolute; left:3px; top:6px; width:10px; height:10px; background:var(--amber); border-radius:2px;}
+  .brand-name{font-family:'IBM Plex Serif',serif; font-weight:600; font-size:17px; letter-spacing:0.02em;}
+  .status-pill{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted);}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--rise); box-shadow:0 0 0 0 rgba(43,182,115,0.6); animation:pulse 2s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(43,182,115,0.55);}
+    70%{box-shadow:0 0 0 7px rgba(43,182,115,0);}
+    100%{box-shadow:0 0 0 0 rgba(43,182,115,0);}
+  }
+
+  .ticker-wrap{border-bottom:1px solid var(--line); background:var(--panel); overflow:hidden; white-space:nowrap;}
+  .ticker{display:inline-flex; padding:9px 0; animation:scroll 32s linear infinite;}
+  .ticker span{padding:0 22px; font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); border-right:1px solid var(--line);}
+  .ticker b{color:var(--paper); margin-right:6px;}
+  .up{color:var(--rise) !important;} .down{color:var(--fall) !important;}
+  @keyframes scroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+
+  main{padding:16px; max-width:720px; margin:0 auto; padding-bottom:40px;}
+
+  .summary{background:linear-gradient(155deg, var(--panel), var(--panel-2)); border:1px solid var(--line);
+    border-radius:14px; padding:18px; margin-bottom:18px;}
+  .summary .eyebrow{font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:6px;}
+  .summary .figure{font-family:'IBM Plex Mono',monospace; font-size:32px; font-weight:600;}
+  .summary .sub{font-size:12px; color:var(--muted); margin-top:4px;}
+
+  .section-title{font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted);
+    margin:22px 0 10px 2px;}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px;}
+  .card-top{display:flex; justify-content:space-between; align-items:center;}
+  .card-name{font-weight:600; font-size:15px;}
+  .card-price{font-family:'IBM Plex Mono',monospace; font-size:15px;}
+  .card-meta{display:flex; gap:14px; margin-top:9px; font-size:12px; color:var(--muted); font-family:'IBM Plex Mono',monospace;}
+  .badge{display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:500;}
+  .badge.trend-up{background:rgba(43,182,115,0.14); color:var(--rise);}
+  .badge.trend-down{background:rgba(225,85,84,0.14); color:var(--fall);}
+  .badge.trend-flat{background:rgba(137,147,168,0.14); color:var(--muted);}
+  .trade-tag{margin-top:9px; padding-top:9px; border-top:1px dashed var(--line); font-size:12px; color:var(--amber); font-family:'IBM Plex Mono',monospace;}
+
+  .empty{color:var(--muted); font-size:13px; text-align:center; padding:30px 0;}
+  footer{text-align:center; color:var(--muted); font-size:11px; padding:20px 0 30px; letter-spacing:0.03em;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark"><div class="wick"></div><div class="body"></div></div>
+    <div class="brand-name">Signal&nbsp;Desk</div>
+  </div>
+  <div class="status-pill"><span class="dot"></span><span id="clock">--:--:--</span></div>
+</header>
+
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">
+    <span class="mono">Loading ticker…</span>
+  </div>
+</div>
+
+<main>
+  <div class="summary">
+    <div class="eyebrow">आजचा एकूण Net नफा/तोटा</div>
+    <div class="figure mono" id="totalPnl">₹ --</div>
+    <div class="sub" id="totalMeta">डेटा लोड होतोय…</div>
+  </div>
+
+  <div class="section-title">Instruments</div>
+  <div id="cards"><div class="empty">डेटा लोड होतोय…</div></div>
+
+  <footer>Paper trading · Angel One SmartAPI + yfinance · केवळ वैयक्तिक वापरासाठी</footer>
+</main>
+
+<script>
+function fmtTime(){
+  const d = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  return d.toLocaleTimeString('en-GB');
+}
+setInterval(()=>{ document.getElementById('clock').textContent = fmtTime(); }, 1000);
+
+function trendBadge(dir){
+  if(dir === 1) return '<span class="badge trend-up">▲ UPTREND</span>';
+  if(dir === -1) return '<span class="badge trend-down">▼ DOWNTREND</span>';
+  return '<span class="badge trend-flat">— माहीत नाही</span>';
+}
+
+async function loadStatus(){
+  try{
+    const res = await fetch('/api/status');
+    const data = await res.json();
+
+    // Ticker tape
+    let tickerHtml = '';
+    for (const sym of data.symbols){
+      const cls = sym.dir === 1 ? 'up' : (sym.dir === -1 ? 'down' : '');
+      const arrow = sym.dir === 1 ? '▲' : (sym.dir === -1 ? '▼' : '•');
+      tickerHtml += `<span><b>${sym.display}</b><span class="${cls}">${arrow} ${sym.price ?? '--'}</span></span>`;
+    }
+    document.getElementById('ticker').innerHTML = tickerHtml + tickerHtml; // duplicate for seamless loop
+
+    // Summary
+    const pnl = data.total_pnl_today;
+    const pnlEl = document.getElementById('totalPnl');
+    pnlEl.textContent = '₹ ' + (pnl === null ? '--' : pnl.toFixed(2));
+    pnlEl.style.color = (pnl > 0) ? 'var(--rise)' : (pnl < 0 ? 'var(--fall)' : 'var(--paper)');
+    document.getElementById('totalMeta').textContent = data.symbols.length + ' instruments ट्रॅक होतायत · शेवटचा अपडेट ' + data.updated_at;
+
+    // Cards
+    let cardsHtml = '';
+    for (const sym of data.symbols){
+      const tradeHtml = sym.current_trade
+        ? `<div class="trade-tag">📌 ${sym.current_trade} ओपन आहे · Entry ${sym.entry_price ?? '-'} · SL ${sym.stop_loss ?? '-'}</div>`
+        : '';
+      cardsHtml += `
+        <div class="card">
+          <div class="card-top">
+            <div class="card-name">${sym.display}</div>
+            <div class="card-price mono">${sym.price ?? '--'}</div>
+          </div>
+          <div class="card-meta">
+            ${trendBadge(sym.dir)}
+            <span>RSI ${sym.rsi ?? '--'}</span>
+            <span>ADX ${sym.adx ?? '--'}</span>
+          </div>
+          ${tradeHtml}
+        </div>`;
+    }
+    document.getElementById('cards').innerHTML = cardsHtml || '<div class="empty">कोणताही instrument सापडला नाही</div>';
+  } catch(e){
+    document.getElementById('cards').innerHTML = '<div class="empty">डेटा मिळाला नाही, पुन्हा प्रयत्न करत आहे…</div>';
+  }
+}
+loadStatus();
+setInterval(loadStatus, 20000);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
