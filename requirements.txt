@@ -1,7 +1,13 @@
-streamlit
-firebase-admin
+numpy
+pandas
+yfinance
+schedule
+requests
+matplotlib
+flask
+pandas-ta
+mplfinance
 smartapi-python
 pyotp
-plotly
 logzero
 websocket-client
