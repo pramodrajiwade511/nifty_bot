@@ -1026,10 +1026,6 @@ def telegram_webhook():
         return "Error", 500
 
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-if __name__ == "__main__":
 @app.route('/test-chart')
 def test_chart_route():
     """TEMPORARY test route - fake BUY ani SELL chart banवून Telegram var pathavto,
@@ -1052,3 +1048,8 @@ def test_chart_route():
         return "Test charts pathavले Telegram var.", 200
     except Exception as e:
         return f"Test chart error: {e}", 200
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
