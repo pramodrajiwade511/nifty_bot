@@ -1029,3 +1029,26 @@ def telegram_webhook():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+if __name__ == "__main__":
+@app.route('/test-chart')
+def test_chart_route():
+    """TEMPORARY test route - fake BUY ani SELL chart banवून Telegram var pathavto,
+    khara sigal yeईparyant vaat na baghता chart kasa disतो te baghnyasathi."""
+    try:
+        ticker = SYMBOLS["NIFTY"]["ticker"]
+        df = yf.download(tickers=ticker, period="5d", interval="5m", progress=False)
+        df = fix_multiindex(df)
+        latest_price = round(df['Close'].iloc[-1], 2)
+        sl_price = latest_price - 15
+
+        chart_path = generate_signal_chart(df, 'BUY', latest_price, sl_price, "NIFTY")
+        if chart_path:
+            send_telegram_chart(chart_path, f"TEST - BUY chart | Price: {latest_price}")
+
+        chart_path2 = generate_signal_chart(df, 'SELL', latest_price, sl_price + 30, "NIFTY")
+        if chart_path2:
+            send_telegram_chart(chart_path2, f"TEST - SELL chart | Price: {latest_price}")
+
+        return "Test charts pathavले Telegram var.", 200
+    except Exception as e:
+        return f"Test chart error: {e}", 200
