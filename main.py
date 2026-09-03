@@ -274,6 +274,13 @@ def generate_signal_chart(df, signal_type, price_level, sl_price, symbol_key):
                               marker=arrow_marker, color=arrow_color)
         ]
 
+        # Signal candle highlight - BUY candle green, SELL candle black
+        highlight_color = '#00e676' if is_up else '#000000'
+        mc_signal = mpf.make_marketcolors(
+            up=highlight_color, down=highlight_color, edge='inherit', wick='inherit', volume='in'
+        )
+        marketcolor_overrides = [None] * (len(chart_df) - 1) + [mc_signal]
+
         s1 = state[symbol_key]["s1"]
         r1 = state[symbol_key]["r1"]
 
@@ -315,6 +322,7 @@ def generate_signal_chart(df, signal_type, price_level, sl_price, symbol_key):
             type='candle',
             style=style,
             addplot=apds,
+            marketcolor_overrides=marketcolor_overrides,
             hlines=dict(hlines=hlines_list, colors=hlines_colors, linestyle='-.', linewidths=1.2),
             title=title_map.get(signal_type, display_name),
             ylabel='Price',
@@ -946,8 +954,8 @@ def check_lot_sizes_route():
         if result and result["lot_size"]:
             match_icon = "✅" if result["lot_size"] == cfg["lot_size"] else "⚠️ MISMATCH"
             lines.append(
-                f"{symbol_key}: Actual lot={result['lot_size']} (code madhे: {cfg['lot_size']}) {match_icon} | "
-                f"Strike step: {result['strike_step']} (code madhे: {cfg['strike_step']})"
+                f"{symbol_key}: Actual lot={result['lot_size']} (code madhе: {cfg['lot_size']}) {match_icon} | "
+                f"Strike step: {result['strike_step']} (code madhе: {cfg['strike_step']})"
             )
         else:
             lines.append(f"{symbol_key}: Scrip master madhe sapadla nahi (verify manually)")
