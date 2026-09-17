@@ -1,330 +1,162 @@
-"""
-broker.py - Angel One SmartAPI integration for nifty_bot (app.py)
+# EMA_STRADDLE mode — FAKT ADD kara, kahihi existing code badalू naka
 
-MPIN vaparun login hoto. Env vars (Render Environment मध्ये set kara):
-    ANGEL_API_KEY
-    ANGEL_CLIENT_CODE
-    ANGEL_MPIN
-    ANGEL_TOTP_SECRET
+## 1. STRATEGY_MODE cha comment update kara (fakt he ek line badla)
 
-⚠️ MPIN kadhihi code madhe hardcode karू naye kiva GitHub var commit karू naye -
-   fakt Render Environment var, environment variable mhanunach store kara.
+FIND:
+```python
+STRATEGY_MODE = "COMBINED"
+```
 
-Requires:
-    pip install smartapi-python pyotp pandas requests --break-system-packages
-"""
+REPLACE WITH:
+```python
+STRATEGY_MODE = "EMA_STRADDLE"  # navीn mode - khali dilela function vaparto
+```
 
-import os
-import logging
-from datetime import datetime, timedelta
-
-import requests
-import pyotp
-import pandas as pd
-from SmartApi import SmartConnect
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [broker] %(message)s")
-log = logging.getLogger("broker")
-
-# ----------------------------------------------------------------------------
-# Config
-# ----------------------------------------------------------------------------
-API_KEY = os.environ.get("ANGEL_API_KEY")
-CLIENT_CODE = os.environ.get("ANGEL_CLIENT_CODE")
-MPIN = os.environ.get("ANGEL_MPIN")
-TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET")
-
-SCRIP_MASTER_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
-
-# app.py cha symbol_key -> Angel scrip master cha "name" field.
-SCRIP_NAME_MAP = {
-    "NIFTY": "NIFTY",
-    "BANKNIFTY": "BANKNIFTY",
-    "SENSEX": "SENSEX",
-    "GOLD": "GOLD",
-    "SILVER": "SILVER",
-    "CRUDEOIL": "CRUDEOIL",
-}
-
-_smart_api_session = None
-_last_error = None
-_scrip_master_cache = None
-_scrip_master_cache_time = None
+(Agodar STRATEGY_MODE veगळं kahi asel — jase "EMA_CROSS" kiva "STRADDLE" — tar
+fakt tyacha VALUE "EMA_STRADDLE" kara, baki tya line varchा comment jasach thevu shakता.)
 
 
-# ----------------------------------------------------------------------------
-# Login (MPIN based)
-# ----------------------------------------------------------------------------
-def get_smart_api_session():
-    """
-    Angel One shी MPIN + TOTP vaparun login karto. Ekda session झाला ki
-    to cache madhe thevla jato. Yashस्वी zalyas SmartConnect object return
-    karto, fail zalyas None.
-    """
-    global _smart_api_session, _last_error
+## 2. Ha navीn function tumchya app.py/main.py cha shevटी paste kara
+(existing kuthlyahi function la dhakka na lavता, fakt file cha शेवटी `if __name__ ==
+"__main__":` cha AADHI paste kara)
 
-    if _smart_api_session is not None:
-        return _smart_api_session
+```python
+# ============================================================================
+# EMA_STRADDLE mode - EMA9/EMA21 crossover zala ki CE+PE donhi ekaच वेळी BUY.
+# Pratyek leg la swतंत्र 10-point SL + 10-point trailing SL (premium वर).
+# Fakt Telegram sिgnal pathavto - actual order Angel One var TAKत नाही.
+# ============================================================================
+_ema_straddle_state = {}
 
-    if not all([API_KEY, CLIENT_CODE, MPIN, TOTP_SECRET]):
-        _last_error = (
-            "ANGEL_API_KEY / ANGEL_CLIENT_CODE / ANGEL_MPIN / ANGEL_TOTP_SECRET "
-            "env variables पैki eक kiva jasta set nahiyet (Render Environment check kara)."
+def _get_ema_straddle_state(symbol_key):
+    if symbol_key not in _ema_straddle_state:
+        _ema_straddle_state[symbol_key] = {
+            "ce_entry": None, "ce_sl": None, "ce_peak_pnl": 0.0,
+            "pe_entry": None, "pe_sl": None, "pe_peak_pnl": 0.0,
+            "active_strike": None,
+        }
+    return _ema_straddle_state[symbol_key]
+
+
+EMA_STRADDLE_SL_POINTS = 10
+EMA_STRADDLE_TRAIL_POINTS = 10
+
+
+def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
+    cfg = SYMBOLS[symbol_key]
+    s = _get_ema_straddle_state(symbol_key)
+    lot_size = cfg["lot_size"]
+    strike_step = cfg["strike_step"]
+    display_name = cfg["display"]
+
+    if lot_size <= 0 or not BROKER_AVAILABLE:
+        return
+
+    if cfg.get("source") == "MCX":
+        df = broker.get_mcx_historical_df(symbol_key)
+    else:
+        df = yf.download(tickers=cfg["ticker"], period="5d", interval="5m", progress=False)
+        df = fix_multiindex(df)
+
+    if df is None or df.empty or len(df) < 22:
+        return
+
+    df['EMA9'] = ta.ema(df['Close'], length=9)
+    df['EMA21'] = ta.ema(df['Close'], length=21)
+
+    latest_price = round(df['Close'].iloc[-1], 2)
+    latest_ema9 = df['EMA9'].iloc[-1]
+    latest_ema21 = df['EMA21'].iloc[-1]
+    prev_ema9 = df['EMA9'].iloc[-2]
+    prev_ema21 = df['EMA21'].iloc[-2]
+
+    crossover_up = (not pd.isna(prev_ema9)) and (not pd.isna(prev_ema21)) and prev_ema9 <= prev_ema21 and latest_ema9 > latest_ema21
+    crossover_down = (not pd.isna(prev_ema9)) and (not pd.isna(prev_ema21)) and prev_ema9 >= prev_ema21 and latest_ema9 < latest_ema21
+    crossover_happened = crossover_up or crossover_down
+
+    already_active = s["ce_entry"] is not None or s["pe_entry"] is not None
+
+    if not already_active and crossover_happened and current_time_str >= "09:17" and current_time_str < "15:15":
+        atm_strike = round(latest_price / strike_step) * strike_step
+        ce_premium = try_get_real_premium(symbol_key, atm_strike, 'CE')
+        pe_premium = try_get_real_premium(symbol_key, atm_strike, 'PE')
+        if ce_premium is None or pe_premium is None:
+            return
+
+        s["ce_entry"] = ce_premium
+        s["ce_sl"] = round(ce_premium - EMA_STRADDLE_SL_POINTS, 2)
+        s["ce_peak_pnl"] = 0.0
+        s["pe_entry"] = pe_premium
+        s["pe_sl"] = round(pe_premium - EMA_STRADDLE_SL_POINTS, 2)
+        s["pe_peak_pnl"] = 0.0
+        s["active_strike"] = atm_strike
+
+        direction = "Bullish (EMA9 वर क्रॉस)" if crossover_up else "Bearish (EMA9 खाली क्रॉस)"
+        send_telegram_message(
+            f"🟡 **{display_name} EMA CROSSOVER — CE+PE BUY**\n\n"
+            f"Crossover: {direction}\nStrike (ATM): {atm_strike}\n"
+            f"👉 BUY {atm_strike} CE | Entry: ₹{ce_premium} | SL: ₹{s['ce_sl']}\n"
+            f"👉 BUY {atm_strike} PE | Entry: ₹{pe_premium} | SL: ₹{s['pe_sl']}\n\n"
+            f"दोन्ही legs वर 10-point SL + 10-point Trailing SL."
         )
-        log.error(_last_error)
-        return None
+        return
 
-    try:
-        smart_api = SmartConnect(api_key=API_KEY)
-        totp = pyotp.TOTP(TOTP_SECRET).now()
-        session_data = smart_api.generateSession(CLIENT_CODE, MPIN, totp)
+    if s["ce_entry"] is not None:
+        atm_strike = s["active_strike"]
+        ce_ltp = try_get_real_premium(symbol_key, atm_strike, 'CE')
+        if ce_ltp is not None:
+            pnl = ce_ltp - s["ce_entry"]
+            s["ce_peak_pnl"] = max(s["ce_peak_pnl"], pnl)
+            trailing_hit = s["ce_peak_pnl"] > 0 and (s["ce_peak_pnl"] - pnl) >= EMA_STRADDLE_TRAIL_POINTS
+            sl_hit = ce_ltp <= s["ce_sl"]
+            if sl_hit or trailing_hit or current_time_str >= "15:20":
+                reason = "SL Hit" if sl_hit else ("Trailing SL Hit" if trailing_hit else "Day End Square-off")
+                send_telegram_message(f"🔴 {display_name} CE EXIT ({reason})\nExit: ₹{ce_ltp} | P&L: ₹{round(pnl*lot_size,2)}")
+                s["ce_entry"] = None
+                s["ce_sl"] = None
+                s["ce_peak_pnl"] = 0.0
+            else:
+                new_sl = round(ce_ltp - EMA_STRADDLE_TRAIL_POINTS, 2)
+                if new_sl > s["ce_sl"]:
+                    s["ce_sl"] = new_sl
 
-        if not session_data.get("status"):
-            _last_error = session_data.get("message", "Unknown login failure")
-            log.error(f"Login failed: {_last_error}")
-            return None
-
-        _smart_api_session = smart_api
-        _last_error = None
-        log.info("Angel One login successful (MPIN वापरून).")
-        return smart_api
-
-    except Exception as e:
-        _last_error = str(e)
-        log.exception("Login exception")
-        return None
-
-
-def get_last_error():
-    return _last_error
-
-
-def reset_session():
-    """Session invalid zali (token expire) tar he call करून parat login karता येईl."""
-    global _smart_api_session
-    _smart_api_session = None
-
-
-# ----------------------------------------------------------------------------
-# Scrip master (instrument list) - cached, dर 12 tasानी refresh
-# ----------------------------------------------------------------------------
-def _load_scrip_master():
-    global _scrip_master_cache, _scrip_master_cache_time
-
-    if (
-        _scrip_master_cache is not None
-        and _scrip_master_cache_time is not None
-        and (datetime.now() - _scrip_master_cache_time) < timedelta(hours=12)
-    ):
-        return _scrip_master_cache
-
-    try:
-        resp = requests.get(SCRIP_MASTER_URL, timeout=30)
-        resp.raise_for_status()
-        _scrip_master_cache = resp.json()
-        _scrip_master_cache_time = datetime.now()
-        log.info(f"Scrip master loaded: {len(_scrip_master_cache)} instruments")
-        return _scrip_master_cache
-    except Exception as e:
-        log.exception("Scrip master download failed")
-        return None
+    if s["pe_entry"] is not None:
+        atm_strike = s["active_strike"]
+        pe_ltp = try_get_real_premium(symbol_key, atm_strike, 'PE')
+        if pe_ltp is not None:
+            pnl = pe_ltp - s["pe_entry"]
+            s["pe_peak_pnl"] = max(s["pe_peak_pnl"], pnl)
+            trailing_hit = s["pe_peak_pnl"] > 0 and (s["pe_peak_pnl"] - pnl) >= EMA_STRADDLE_TRAIL_POINTS
+            sl_hit = pe_ltp <= s["pe_sl"]
+            if sl_hit or trailing_hit or current_time_str >= "15:20":
+                reason = "SL Hit" if sl_hit else ("Trailing SL Hit" if trailing_hit else "Day End Square-off")
+                send_telegram_message(f"🔴 {display_name} PE EXIT ({reason})\nExit: ₹{pe_ltp} | P&L: ₹{round(pnl*lot_size,2)}")
+                s["pe_entry"] = None
+                s["pe_sl"] = None
+                s["pe_peak_pnl"] = 0.0
+            else:
+                new_sl = round(pe_ltp - EMA_STRADDLE_TRAIL_POINTS, 2)
+                if new_sl > s["pe_sl"]:
+                    s["pe_sl"] = new_sl
+```
 
 
-def get_option_contract(symbol_key, strike, option_type):
-    """Scrip master madhun option cha token+tradingsymbol (nearest expiry) kadhto."""
-    scrip_master = _load_scrip_master()
-    if scrip_master is None:
-        return None
-    name = SCRIP_NAME_MAP.get(symbol_key, symbol_key)
-    strike_paise = str(int(round(strike * 100)))
-    candidates = [
-        row for row in scrip_master
-        if row.get("name") == name
-        and row.get("instrumenttype") in ("OPTIDX", "OPTSTK")
-        and row.get("strike") == strike_paise
-        and str(row.get("symbol", "")).endswith(option_type)
-    ]
-    if not candidates:
-        return None
-    try:
-        candidates.sort(key=lambda r: datetime.strptime(r.get("expiry", ""), "%d%b%Y"))
-    except Exception:
-        pass
-    return candidates[0]
+## 3. check_signals() function madhे fakt routing jodा (existing loop badla naka, ovaल एक if jodा)
 
-
-# ----------------------------------------------------------------------------
-# Option premium (live LTP)
-# ----------------------------------------------------------------------------
-def get_option_premium(symbol_key, strike, option_type):
-    """
-    symbol_key (e.g. 'NIFTY'), ATM strike, option_type ('CE'/'PE') वरून
-    sagळ्यात jawळच्या expiry cha live LTP देतो. Adchan aali tar None.
-    """
-    smart_api = get_smart_api_session()
-    if smart_api is None:
-        return None
-
-    contract = get_option_contract(symbol_key, strike, option_type)
-    if contract is None:
-        log.warning(f"No option contract found for {symbol_key} {strike} {option_type}")
-        return None
-
-    try:
-        ltp_resp = smart_api.ltpData(
-            contract.get("exch_seg", "NFO"),
-            contract["symbol"],
-            contract["token"],
-        )
-        if ltp_resp.get("status") and ltp_resp.get("data"):
-            return float(ltp_resp["data"]["ltp"])
-        log.warning(f"LTP fetch returned no data: {ltp_resp}")
-        return None
-    except Exception as e:
-        log.exception("LTP fetch failed")
-        return None
-
-
-# ----------------------------------------------------------------------------
-# Order placement (LIVE_TRADING gate app.py madhe aहे)
-# ----------------------------------------------------------------------------
-def place_order(symbol_key, strike, option_type, transaction_type, quantity):
-    """
-    Real order Angel One var place karto (INTRADAY, MARKET order).
-    transaction_type: "BUY" kiva "SELL"
-    Yashaswi zalyas order response return karto, fail zalyas None.
-    """
-    smart_api = get_smart_api_session()
-    if smart_api is None:
-        log.error("Order place failed: no session")
-        return None
-
-    contract = get_option_contract(symbol_key, strike, option_type)
-    if contract is None:
-        log.error(f"Order place failed: contract not found for {symbol_key} {strike} {option_type}")
-        return None
-
-    order_params = {
-        "variety": "NORMAL",
-        "tradingsymbol": contract["symbol"],
-        "symboltoken": contract["token"],
-        "transactiontype": transaction_type,
-        "exchange": contract.get("exch_seg", "NFO"),
-        "ordertype": "MARKET",
-        "producttype": "INTRADAY",
-        "duration": "DAY",
-        "quantity": str(quantity),
-    }
-    try:
-        resp = smart_api.placeOrder(order_params)
-        log.info(f"Order response ({transaction_type} {contract['symbol']} x{quantity}): {resp}")
-        return resp
-    except Exception as e:
-        log.exception(f"Order placement failed ({transaction_type} {contract['symbol']})")
-        return None
-
-
-# ----------------------------------------------------------------------------
-# MCX historical candles
-# ----------------------------------------------------------------------------
-def get_mcx_historical_df(symbol_key):
-    """
-    MCX commodity (GOLD/SILVER/CRUDEOIL) chi sagळ्यात jawळच्या expiry chya
-    futures contract chi 5-din chi 5-minute candle data pandas DataFrame
-    mhanun return karto (columns: Open, High, Low, Close, Volume).
-    """
-    smart_api = get_smart_api_session()
-    if smart_api is None:
-        return pd.DataFrame()
-
-    scrip_master = _load_scrip_master()
-    if scrip_master is None:
-        return pd.DataFrame()
-
-    name = SCRIP_NAME_MAP.get(symbol_key, symbol_key)
-    candidates = [
-        row for row in scrip_master
-        if row.get("name") == name
-        and row.get("exch_seg") == "MCX"
-        and row.get("instrumenttype") == "FUTCOM"
-    ]
-    if not candidates:
-        log.warning(f"No MCX futures contract found for {name}")
-        return pd.DataFrame()
-
-    try:
-        candidates.sort(key=lambda r: datetime.strptime(r.get("expiry", ""), "%d%b%Y"))
-    except Exception:
-        pass
-    contract = candidates[0]
-
-    to_dt = datetime.now()
-    from_dt = to_dt - timedelta(days=5)
-    params = {
-        "exchange": "MCX",
-        "symboltoken": contract["token"],
-        "interval": "FIVE_MINUTE",
-        "fromdate": from_dt.strftime("%Y-%m-%d %H:%M"),
-        "todate": to_dt.strftime("%Y-%m-%d %H:%M"),
-    }
-
-    try:
-        resp = smart_api.getCandleData(params)
-        if not resp.get("status") or not resp.get("data"):
-            log.warning(f"MCX candle fetch failed: {resp}")
-            return pd.DataFrame()
-
-        df = pd.DataFrame(resp["data"], columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df.set_index("timestamp", inplace=True)
-        for col in ["Open", "High", "Low", "Close", "Volume"]:
-            df[col] = df[col].astype(float)
-        return df
-    except Exception as e:
-        log.exception("MCX candle fetch exception")
-        return pd.DataFrame()
-
-
-# ----------------------------------------------------------------------------
-# Auto-discover lot size & strike step
-# ----------------------------------------------------------------------------
-def auto_discover_lot_and_strikes(symbol_key):
-    """
-    Scrip master vaparun symbol_key cha actual current lot_size ani
-    strike_step shodhून {"lot_size": int, "strike_step": number} return karto.
-    """
-    scrip_master = _load_scrip_master()
-    if scrip_master is None:
-        return None
-
-    name = SCRIP_NAME_MAP.get(symbol_key, symbol_key)
-
-    fut_candidates = [
-        row for row in scrip_master
-        if row.get("name") == name
-        and row.get("instrumenttype") in ("FUTIDX", "FUTSTK", "FUTCOM")
-    ]
-    lot_size = None
-    if fut_candidates:
+FIND (tumchya check_signals() function madhला symbol loop):
+```python
+    for symbol_key in SYMBOLS:
         try:
-            fut_candidates.sort(key=lambda r: datetime.strptime(r.get("expiry", ""), "%d%b%Y"))
-        except Exception:
-            pass
-        lot_size = int(fut_candidates[0].get("lotsize", 0)) or None
+```
 
-    opt_strikes = sorted({
-        int(row["strike"]) / 100
-        for row in scrip_master
-        if row.get("name") == name and row.get("instrumenttype") in ("OPTIDX", "OPTSTK")
-        and row.get("strike")
-    })
-    strike_step = None
-    if len(opt_strikes) >= 2:
-        diffs = [round(b - a, 2) for a, b in zip(opt_strikes, opt_strikes[1:]) if b > a]
-        if diffs:
-            strike_step = min(diffs)
+REPLACE WITH:
+```python
+    for symbol_key in SYMBOLS:
+        try:
+            if STRATEGY_MODE == "EMA_STRADDLE":
+                check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str)
+                continue
+```
 
-    if lot_size is None and strike_step is None:
-        return None
-
-    return {"lot_size": lot_size or 0, "strike_step": strike_step or 0}
+(he existing check_signals_for_symbol() call skip karel jevha mode "EMA_STRADDLE"
+asel, baki sagळे modes आधीसारखेच chaltील.)
