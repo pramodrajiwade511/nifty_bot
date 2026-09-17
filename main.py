@@ -1,50 +1,143 @@
-# EMA_STRADDLE mode — FAKT ADD kara, kahihi existing code badalू naka
+import os
+import requests
+import pandas as pd
+import pandas_ta as ta
+from flask import Flask, request, jsonify
+import yfinance as yf
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-## 1. STRATEGY_MODE cha comment update kara (fakt he ek line badla)
+try:
+    import broker
+    BROKER_AVAILABLE = True
+except Exception as e:
+    print(f"broker.py load error: {e}")
+    BROKER_AVAILABLE = False
 
-FIND:
-```python
-STRATEGY_MODE = "COMBINED"
-```
+app = Flask(__name__)
+IST = ZoneInfo("Asia/Kolkata")
 
-REPLACE WITH:
-```python
-STRATEGY_MODE = "EMA_STRADDLE"  # navीn mode - khali dilela function vaparto
-```
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
-(Agodar STRATEGY_MODE veगळं kahi asel — jase "EMA_CROSS" kiva "STRADDLE" — tar
-fakt tyacha VALUE "EMA_STRADDLE" kara, baki tya line varchा comment jasach thevu shakता.)
+# LIVE_TRADING="true" asel tarच khऱ्या Angel One var actual order jाईl.
+# Nasel/khali asel tar bot fakt PAPER mode madhe chalel (Telegram alerts fakt,
+# khara paisa risk madhे nahi). Test purna zalyavarच "true" kara.
+LIVE_TRADING = os.environ.get("LIVE_TRADING", "false").lower() == "true"
+
+ALL_SYMBOLS = {
+    "NIFTY": {"ticker": "^NSEI", "lot_size": 65, "strike_step": 50, "display": "Nifty 50"},
+    "BANKNIFTY": {"ticker": "^NSEBANK", "lot_size": 30, "strike_step": 100, "display": "Bank Nifty"},
+    "SENSEX": {"ticker": "^BSESN", "lot_size": 20, "strike_step": 100, "display": "Sensex"},
+    "GOLD": {"ticker": None, "source": "MCX", "lot_size": 0, "strike_step": 0, "display": "Gold (MCX)"},
+    "SILVER": {"ticker": None, "source": "MCX", "lot_size": 0, "strike_step": 0, "display": "Silver (MCX)"},
+    "CRUDEOIL": {"ticker": None, "source": "MCX", "lot_size": 0, "strike_step": 0, "display": "Crude Oil (MCX)"},
+}
+INDICES_KEYS = ["NIFTY", "BANKNIFTY", "SENSEX"]
+COMMODITY_KEYS = ["GOLD", "SILVER", "CRUDEOIL"]
+SYMBOL_GROUP = os.environ.get("SYMBOL_GROUP", "ALL")
+
+if SYMBOL_GROUP == "INDICES":
+    SYMBOLS = {k: v for k, v in ALL_SYMBOLS.items() if k in INDICES_KEYS}
+elif SYMBOL_GROUP == "COMMODITIES":
+    SYMBOLS = {k: v for k, v in ALL_SYMBOLS.items() if k in COMMODITY_KEYS}
+else:
+    SYMBOLS = ALL_SYMBOLS
+
+state = {
+    sym: {
+        "daily_trades": [],
+        "last_status_price": None,
+        "last_status_time": None,
+        "ce_entry": None,
+        "ce_sl": None,
+        "ce_peak_pnl": 0.0,
+        "pe_entry": None,
+        "pe_sl": None,
+        "pe_peak_pnl": 0.0,
+        "active_strike": None,
+    }
+    for sym in SYMBOLS
+}
+
+last_gm_date = ""
+last_daily_summary_date = ""
+
+SL_POINTS = 10
+TRAIL_POINTS = 10
 
 
-## 2. Ha navीn function tumchya app.py/main.py cha shevटी paste kara
-(existing kuthlyahi function la dhakka na lavता, fakt file cha शेवटी `if __name__ ==
-"__main__":` cha AADHI paste kara)
-
-```python
-# ============================================================================
-# EMA_STRADDLE mode - EMA9/EMA21 crossover zala ki CE+PE donhi ekaच वेळी BUY.
-# Pratyek leg la swतंत्र 10-point SL + 10-point trailing SL (premium वर).
-# Fakt Telegram sिgnal pathavto - actual order Angel One var TAKत नाही.
-# ============================================================================
-_ema_straddle_state = {}
-
-def _get_ema_straddle_state(symbol_key):
-    if symbol_key not in _ema_straddle_state:
-        _ema_straddle_state[symbol_key] = {
-            "ce_entry": None, "ce_sl": None, "ce_peak_pnl": 0.0,
-            "pe_entry": None, "pe_sl": None, "pe_peak_pnl": 0.0,
-            "active_strike": None,
-        }
-    return _ema_straddle_state[symbol_key]
+def send_telegram_message(message):
+    if not BOT_TOKEN or not CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    try:
+        requests.post(url, json={"chat_id": CHAT_ID, "text": message}, timeout=10)
+    except Exception as e:
+        print(f"Error sending message: {e}")
 
 
-EMA_STRADDLE_SL_POINTS = 10
-EMA_STRADDLE_TRAIL_POINTS = 10
+def fix_multiindex(df):
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df
+
+
+def try_get_real_premium(symbol_key, strike, option_type):
+    if not BROKER_AVAILABLE:
+        return None
+    try:
+        return broker.get_option_premium(symbol_key, strike, option_type)
+    except Exception as e:
+        print(f"Real premium fetch error: {e}")
+        return None
+
+
+def place_real_order(symbol_key, strike, option_type, transaction_type, quantity):
+    if not LIVE_TRADING:
+        print(f"[PAPER MODE] Would place {transaction_type} {symbol_key} {strike}{option_type} x{quantity}")
+        return {"paper": True}
+    if not BROKER_AVAILABLE:
+        return None
+    try:
+        return broker.place_order(symbol_key, strike, option_type, transaction_type, quantity)
+    except Exception as e:
+        print(f"Order placement error: {e}")
+        return None
+
+
+def get_today_total_pnl(today_str):
+    total = 0
+    for sym in SYMBOLS:
+        total += sum(t['pnl'] for t in state[sym]["daily_trades"] if t['date'] == today_str)
+    return total
+
+
+def calculate_reports(symbol_key):
+    daily_trades = state[symbol_key]["daily_trades"]
+    display_name = SYMBOLS[symbol_key]["display"]
+    if not daily_trades:
+        return f"📊 {display_name}: अजून कोणताही ट्रेड पूर्ण झाला नाही."
+    today_str = datetime.now(IST).strftime('%Y-%m-%d')
+    today_trades = [t for t in daily_trades if t['date'] == today_str]
+    lines = [f"📊 **{display_name} REPORT** 📊"]
+    today_pnl = 0
+    for t in today_trades:
+        today_pnl += t['pnl']
+        lines.append(f"• {t['type']} {t['strike']} | Entry: {t['entry']} → Exit: {t['exit']} | P&L: ₹{round(t['pnl'],2)}")
+    lines.append(f"\n🗓️ आजचा एकूण P&L: ₹{round(today_pnl, 2)}")
+    return "\n".join(lines)
 
 
 def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
+    """
+    EMA9/EMA21 crossover (koणत्याही dishela) zala ki CE ani PE donhi ATM options
+    ekaच वेळी BUY karto. Pratyek leg la swतंत्र 10-point SL + 10-point trailing SL
+    (PREMIUM वर). Ekada position open asel tar navीn entry ghetli jात नाही.
+    """
+    global last_gm_date
     cfg = SYMBOLS[symbol_key]
-    s = _get_ema_straddle_state(symbol_key)
+    s = state[symbol_key]
     lot_size = cfg["lot_size"]
     strike_step = cfg["strike_step"]
     display_name = cfg["display"]
@@ -70,6 +163,9 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
     prev_ema9 = df['EMA9'].iloc[-2]
     prev_ema21 = df['EMA21'].iloc[-2]
 
+    s["last_status_price"] = latest_price
+    s["last_status_time"] = now.strftime('%H:%M:%S')
+
     crossover_up = (not pd.isna(prev_ema9)) and (not pd.isna(prev_ema21)) and prev_ema9 <= prev_ema21 and latest_ema9 > latest_ema21
     crossover_down = (not pd.isna(prev_ema9)) and (not pd.isna(prev_ema21)) and prev_ema9 >= prev_ema21 and latest_ema9 < latest_ema21
     crossover_happened = crossover_up or crossover_down
@@ -80,20 +176,28 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
         atm_strike = round(latest_price / strike_step) * strike_step
         ce_premium = try_get_real_premium(symbol_key, atm_strike, 'CE')
         pe_premium = try_get_real_premium(symbol_key, atm_strike, 'PE')
+
         if ce_premium is None or pe_premium is None:
             return
 
+        ce_order = place_real_order(symbol_key, atm_strike, 'CE', 'BUY', lot_size)
+        pe_order = place_real_order(symbol_key, atm_strike, 'PE', 'BUY', lot_size)
+        if LIVE_TRADING and (ce_order is None or pe_order is None):
+            send_telegram_message(f"🚨 {display_name}: LIVE order placement fail zala")
+            return
+
         s["ce_entry"] = ce_premium
-        s["ce_sl"] = round(ce_premium - EMA_STRADDLE_SL_POINTS, 2)
+        s["ce_sl"] = round(ce_premium - SL_POINTS, 2)
         s["ce_peak_pnl"] = 0.0
         s["pe_entry"] = pe_premium
-        s["pe_sl"] = round(pe_premium - EMA_STRADDLE_SL_POINTS, 2)
+        s["pe_sl"] = round(pe_premium - SL_POINTS, 2)
         s["pe_peak_pnl"] = 0.0
         s["active_strike"] = atm_strike
 
+        mode_tag = "🔴 LIVE" if LIVE_TRADING else "📝 PAPER"
         direction = "Bullish (EMA9 वर क्रॉस)" if crossover_up else "Bearish (EMA9 खाली क्रॉस)"
         send_telegram_message(
-            f"🟡 **{display_name} EMA CROSSOVER — CE+PE BUY**\n\n"
+            f"🟡 **{display_name} EMA CROSSOVER — CE+PE BUY** [{mode_tag}]\n\n"
             f"Crossover: {direction}\nStrike (ATM): {atm_strike}\n"
             f"👉 BUY {atm_strike} CE | Entry: ₹{ce_premium} | SL: ₹{s['ce_sl']}\n"
             f"👉 BUY {atm_strike} PE | Entry: ₹{pe_premium} | SL: ₹{s['pe_sl']}\n\n"
@@ -107,16 +211,21 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
         if ce_ltp is not None:
             pnl = ce_ltp - s["ce_entry"]
             s["ce_peak_pnl"] = max(s["ce_peak_pnl"], pnl)
-            trailing_hit = s["ce_peak_pnl"] > 0 and (s["ce_peak_pnl"] - pnl) >= EMA_STRADDLE_TRAIL_POINTS
+            trailing_hit = s["ce_peak_pnl"] > 0 and (s["ce_peak_pnl"] - pnl) >= TRAIL_POINTS
             sl_hit = ce_ltp <= s["ce_sl"]
-            if sl_hit or trailing_hit or current_time_str >= "15:20":
+            day_end = current_time_str >= "15:20"
+            if sl_hit or trailing_hit or day_end:
                 reason = "SL Hit" if sl_hit else ("Trailing SL Hit" if trailing_hit else "Day End Square-off")
-                send_telegram_message(f"🔴 {display_name} CE EXIT ({reason})\nExit: ₹{ce_ltp} | P&L: ₹{round(pnl*lot_size,2)}")
+                place_real_order(symbol_key, atm_strike, 'CE', 'SELL', lot_size)
+                leg_pnl = round(pnl * lot_size, 2)
+                mode_tag = "🔴 LIVE" if LIVE_TRADING else "📝 PAPER"
+                send_telegram_message(f"🔴 {display_name} CE EXIT ({reason}) [{mode_tag}]\nExit: ₹{ce_ltp} | P&L: ₹{leg_pnl}")
+                s["daily_trades"].append({'date': today_str, 'type': 'CE', 'strike': f"{atm_strike} CE", 'entry': s["ce_entry"], 'exit': ce_ltp, 'pnl': leg_pnl})
                 s["ce_entry"] = None
                 s["ce_sl"] = None
                 s["ce_peak_pnl"] = 0.0
             else:
-                new_sl = round(ce_ltp - EMA_STRADDLE_TRAIL_POINTS, 2)
+                new_sl = round(ce_ltp - TRAIL_POINTS, 2)
                 if new_sl > s["ce_sl"]:
                     s["ce_sl"] = new_sl
 
@@ -126,37 +235,134 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
         if pe_ltp is not None:
             pnl = pe_ltp - s["pe_entry"]
             s["pe_peak_pnl"] = max(s["pe_peak_pnl"], pnl)
-            trailing_hit = s["pe_peak_pnl"] > 0 and (s["pe_peak_pnl"] - pnl) >= EMA_STRADDLE_TRAIL_POINTS
+            trailing_hit = s["pe_peak_pnl"] > 0 and (s["pe_peak_pnl"] - pnl) >= TRAIL_POINTS
             sl_hit = pe_ltp <= s["pe_sl"]
-            if sl_hit or trailing_hit or current_time_str >= "15:20":
+            day_end = current_time_str >= "15:20"
+            if sl_hit or trailing_hit or day_end:
                 reason = "SL Hit" if sl_hit else ("Trailing SL Hit" if trailing_hit else "Day End Square-off")
-                send_telegram_message(f"🔴 {display_name} PE EXIT ({reason})\nExit: ₹{pe_ltp} | P&L: ₹{round(pnl*lot_size,2)}")
+                place_real_order(symbol_key, atm_strike, 'PE', 'SELL', lot_size)
+                leg_pnl = round(pnl * lot_size, 2)
+                mode_tag = "🔴 LIVE" if LIVE_TRADING else "📝 PAPER"
+                send_telegram_message(f"🔴 {display_name} PE EXIT ({reason}) [{mode_tag}]\nExit: ₹{pe_ltp} | P&L: ₹{leg_pnl}")
+                s["daily_trades"].append({'date': today_str, 'type': 'PE', 'strike': f"{atm_strike} PE", 'entry': s["pe_entry"], 'exit': pe_ltp, 'pnl': leg_pnl})
                 s["pe_entry"] = None
                 s["pe_sl"] = None
                 s["pe_peak_pnl"] = 0.0
             else:
-                new_sl = round(pe_ltp - EMA_STRADDLE_TRAIL_POINTS, 2)
+                new_sl = round(pe_ltp - TRAIL_POINTS, 2)
                 if new_sl > s["pe_sl"]:
                     s["pe_sl"] = new_sl
-```
+
+    if s["ce_entry"] is None and s["pe_entry"] is None and s["active_strike"] is not None:
+        send_telegram_message(calculate_reports(symbol_key))
+        s["active_strike"] = None
 
 
-## 3. check_signals() function madhे fakt routing jodा (existing loop badla naka, ovaल एक if jodा)
+def check_signals():
+    global last_gm_date, last_daily_summary_date
+    now = datetime.now(IST)
+    today_str = now.strftime('%Y-%m-%d')
+    current_time_str = now.strftime('%H:%M')
+    weekday = now.weekday()
 
-FIND (tumchya check_signals() function madhला symbol loop):
-```python
+    if weekday >= 5 or current_time_str < "09:00" or current_time_str > "15:35":
+        return
+
+    if current_time_str >= "09:00" and current_time_str < "09:15" and last_gm_date != today_str:
+        mode_tag = "🔴 LIVE TRADING" if LIVE_TRADING else "📝 PAPER MODE"
+        send_telegram_message(f"Good Morning! EMA Crossover CE+PE Bot सक्रिय झाला. Mode: {mode_tag}")
+        last_gm_date = today_str
+
     for symbol_key in SYMBOLS:
         try:
-```
+            check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str)
+        except Exception as e:
+            print(f"Error for {symbol_key}: {e}")
+            send_telegram_message(f"⚠️ Bot Error ({symbol_key}): {e}")
 
-REPLACE WITH:
-```python
-    for symbol_key in SYMBOLS:
-        try:
-            if STRATEGY_MODE == "EMA_STRADDLE":
-                check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str)
-                continue
-```
+    if current_time_str >= "15:30" and last_daily_summary_date != today_str:
+        total_pnl = get_today_total_pnl(today_str)
+        send_telegram_message(f"🔔 **DAY END SUMMARY** ({today_str})\n💰 एकूण आजचा नफा/तोटा: ₹{round(total_pnl, 2)}")
+        last_daily_summary_date = today_str
 
-(he existing check_signals_for_symbol() call skip karel jevha mode "EMA_STRADDLE"
-asel, baki sagळे modes आधीसारखेच chaltील.)
+
+@app.route('/')
+def home():
+    print("Cron-job ping received.")
+    check_signals()
+    mode_text = "LIVE TRADING" if LIVE_TRADING else "PAPER MODE"
+    return f"Bot is running! EMA Crossover CE+PE Bot Active. Mode: {mode_text}", 200
+
+
+@app.route('/api/status')
+def api_status():
+    today_str = datetime.now(IST).strftime('%Y-%m-%d')
+    symbols_data = []
+    for symbol_key, cfg in SYMBOLS.items():
+        s = state[symbol_key]
+        symbols_data.append({
+            "key": symbol_key, "display": cfg["display"],
+            "price": s["last_status_price"],
+            "ce_entry": s.get("ce_entry"), "ce_sl": s.get("ce_sl"),
+            "pe_entry": s.get("pe_entry"), "pe_sl": s.get("pe_sl"),
+        })
+    total_pnl = get_today_total_pnl(today_str)
+    return jsonify({"live_trading": LIVE_TRADING, "symbols": symbols_data, "total_pnl_today": total_pnl, "updated_at": datetime.now(IST).strftime('%H:%M:%S')})
+
+
+@app.route('/test-broker')
+def test_broker():
+    if not BROKER_AVAILABLE:
+        msg = "❌ broker.py load zala nahi."
+        send_telegram_message(msg)
+        return msg, 200
+    try:
+        session = broker.get_smart_api_session()
+        if session:
+            mode_tag = "🔴 LIVE TRADING ON" if LIVE_TRADING else "📝 PAPER MODE (LIVE_TRADING=false)"
+            msg = f"✅ Angel One session यशस्वी झाले! Connection working ahe.\nMode: {mode_tag}"
+        else:
+            detail = broker.get_last_error() or "unknown error"
+            msg = f"❌ Angel One session fail zala.\nकारण: {detail}"
+        send_telegram_message(msg)
+        return msg, 200
+    except Exception as e:
+        err_msg = f"❌ Broker test error: {e}"
+        send_telegram_message(err_msg)
+        return err_msg, 200
+
+
+@app.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    try:
+        update = request.get_json()
+        if not update or "message" not in update or "text" not in update["message"]:
+            return "OK", 200
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"]["text"].lower().strip()
+
+        if text == "/start":
+            mode_tag = "🔴 LIVE TRADING" if LIVE_TRADING else "📝 PAPER MODE"
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                          json={"chat_id": chat_id, "text": f"😊 EMA Crossover CE+PE Bot सुरू झाला!\nMode: {mode_tag}\n/report ani /status vapra."})
+        elif text == "/report":
+            report_message = "\n\n".join(calculate_reports(sym) for sym in SYMBOLS)
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": report_message})
+        elif text == "/status":
+            mode_tag = "🔴 LIVE TRADING" if LIVE_TRADING else "📝 PAPER MODE"
+            lines = [f"🔍 **BOT STATUS** (Mode: {mode_tag})"]
+            for symbol_key, cfg in SYMBOLS.items():
+                s = state[symbol_key]
+                ce_text = f"CE Entry: ₹{s['ce_entry']} SL: ₹{s['ce_sl']}" if s.get("ce_entry") else "CE: उघडलेलं नाही"
+                pe_text = f"PE Entry: ₹{s['pe_entry']} SL: ₹{s['pe_sl']}" if s.get("pe_entry") else "PE: उघडलेलं नाही"
+                lines.append(f"\n**{cfg['display']}**\nPrice: {s['last_status_price']}\n{ce_text}\n{pe_text}")
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "\n".join(lines)})
+        return "OK", 200
+    except Exception as e:
+        print(f"Error: {e}")
+        return "Error", 500
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
