@@ -328,3 +328,37 @@ def auto_discover_lot_and_strikes(symbol_key):
         return None
 
     return {"lot_size": lot_size or 0, "strike_step": strike_step or 0}
+# broker.py cha SHEVTI ha function ADD kara (existing kahihi badla naka)
+
+INDEX_LTP_TOKENS = {
+    # (exchange, symboltoken, tradingsymbol) - Angel One cha well-known index tokens
+    "NIFTY": ("NSE", "99926000", "Nifty 50"),
+    "BANKNIFTY": ("NSE", "99926009", "Nifty Bank"),
+    "SENSEX": ("BSE", "99919000", "SENSEX"),
+}
+
+
+def get_index_ltp(symbol_key):
+    """
+    Index cha live spot price थेट Angel One वरून (yfinance ऐवजी) आणतो.
+    yfinance kadhi kadhi stale/juna data देतो, tyामुळे strike calculation
+    chukते - he function tyavar उपाय आहे. Adchan aali tar None.
+    """
+    smart_api = get_smart_api_session()
+    if smart_api is None:
+        return None
+
+    mapping = INDEX_LTP_TOKENS.get(symbol_key)
+    if mapping is None:
+        return None
+
+    exchange, token, tradingsymbol = mapping
+    try:
+        ltp_resp = smart_api.ltpData(exchange, tradingsymbol, token)
+        if ltp_resp.get("status") and ltp_resp.get("data"):
+            return float(ltp_resp["data"]["ltp"])
+        log.warning(f"Index LTP fetch returned no data for {symbol_key}: {ltp_resp}")
+        return None
+    except Exception as e:
+        log.exception(f"Index LTP fetch failed for {symbol_key}")
+        return None
