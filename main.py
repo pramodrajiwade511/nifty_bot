@@ -173,7 +173,12 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
     already_active = s["ce_entry"] is not None or s["pe_entry"] is not None
 
     if not already_active and crossover_happened and current_time_str >= "09:17" and current_time_str < "15:15":
-        atm_strike = round(latest_price / strike_step) * strike_step
+        # yfinance kadhi kadhi stale price देतो, tyामुळे strike calculation sathi
+        # thet Angel One cha live index price vaparto (jast bharwaसाcha). Nasel
+        # milala tar yfinance cha price fallback mhanun vaparto.
+        live_spot = broker.get_index_ltp(symbol_key) if cfg.get("source") != "MCX" else None
+        strike_calc_price = live_spot if live_spot is not None else latest_price
+        atm_strike = round(strike_calc_price / strike_step) * strike_step
         ce_premium = try_get_real_premium(symbol_key, atm_strike, 'CE')
         pe_premium = try_get_real_premium(symbol_key, atm_strike, 'PE')
 
