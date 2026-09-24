@@ -136,12 +136,22 @@ def get_option_contract(symbol_key, strike, option_type):
     if scrip_master is None:
         return None
     name = SCRIP_NAME_MAP.get(symbol_key, symbol_key)
-    strike_paise = str(int(round(strike * 100)))
+
+    def _strike_matches(row_strike_raw):
+        # Angel scrip master cha strike field kadhi "5560000" tar kadhi
+        # "5560000.000000" asा decimal sह yeto - tyamule float compare karto,
+        # exact string match nahi (0.01 rupya पर्यंत tolerance).
+        try:
+            row_strike_rupees = float(row_strike_raw) / 100
+            return abs(row_strike_rupees - strike) < 0.01
+        except (TypeError, ValueError):
+            return False
+
     candidates = [
         row for row in scrip_master
         if row.get("name") == name
         and row.get("instrumenttype") in ("OPTIDX", "OPTSTK")
-        and row.get("strike") == strike_paise
+        and _strike_matches(row.get("strike"))
         and str(row.get("symbol", "")).endswith(option_type)
     ]
     if not candidates:
@@ -313,7 +323,7 @@ def auto_discover_lot_and_strikes(symbol_key):
         lot_size = int(fut_candidates[0].get("lotsize", 0)) or None
 
     opt_strikes = sorted({
-        int(row["strike"]) / 100
+        float(row["strike"]) / 100
         for row in scrip_master
         if row.get("name") == name and row.get("instrumenttype") in ("OPTIDX", "OPTSTK")
         and row.get("strike")
