@@ -63,8 +63,8 @@ state = {
 last_gm_date = ""
 last_daily_summary_date = ""
 
-SL_POINTS = 10
-TRAIL_POINTS = 10
+MAX_LOSS_RUPEES = 550   # ~500-600 rupaya दरम्यान loss मर्यादित राहावा म्हणून (lot_size नुसार points calculate होतात)
+TRAIL_POINTS = 10        # Target/trailing logic जसंच्या तसं - बदल नाही
 
 
 def send_telegram_message(message):
@@ -132,8 +132,9 @@ def calculate_reports(symbol_key):
 def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
     """
     EMA9/EMA21 crossover (koणत्याही dishela) zala ki CE ani PE donhi ATM options
-    ekaच वेळी BUY karto. Pratyek leg la swतंत्र 10-point SL + 10-point trailing SL
-    (PREMIUM वर). Ekada position open asel tar navीn entry ghetli jात नाही.
+    ekaच वेळी BUY karto. Pratyek leg la swतंत्र stop-loss (~₹500-600 पर्यंत,
+    lot_size नुसार calculate होतो) + 10-point trailing SL (PREMIUM वर).
+    Ekada position open asel tar navीn entry ghetli jात नाही.
     """
     global last_gm_date
     cfg = SYMBOLS[symbol_key]
@@ -191,11 +192,13 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
             send_telegram_message(f"🚨 {display_name}: LIVE order placement fail zala")
             return
 
+        sl_points_this_symbol = round(MAX_LOSS_RUPEES / lot_size, 2)  # ~₹500-600 loss साठी, lot size नुसार
+
         s["ce_entry"] = ce_premium
-        s["ce_sl"] = round(ce_premium - SL_POINTS, 2)
+        s["ce_sl"] = round(ce_premium - sl_points_this_symbol, 2)
         s["ce_peak_pnl"] = 0.0
         s["pe_entry"] = pe_premium
-        s["pe_sl"] = round(pe_premium - SL_POINTS, 2)
+        s["pe_sl"] = round(pe_premium - sl_points_this_symbol, 2)
         s["pe_peak_pnl"] = 0.0
         s["active_strike"] = atm_strike
 
@@ -206,7 +209,7 @@ def check_ema_straddle_for_symbol(symbol_key, now, today_str, current_time_str):
             f"Crossover: {direction}\nStrike (ATM): {atm_strike}\n"
             f"👉 BUY {atm_strike} CE | Entry: ₹{ce_premium} | SL: ₹{s['ce_sl']}\n"
             f"👉 BUY {atm_strike} PE | Entry: ₹{pe_premium} | SL: ₹{s['pe_sl']}\n\n"
-            f"दोन्ही legs वर 10-point SL + 10-point Trailing SL."
+            f"प्रत्येक leg चं max नुकसान अंदाजे ₹{MAX_LOSS_RUPEES} पर्यंत + 10-point Trailing SL."
         )
         return
 
